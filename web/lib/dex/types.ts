@@ -223,6 +223,23 @@ export interface DexAdapter {
     size: number,
     options?: { wallet?: string; accountID?: number }
   ): Promise<UnsignedAction>;
+
+  buildUpdateMargin(
+    symbol: string,
+    amount: number,
+    type: "add" | "remove",
+    options?: { wallet?: string; accountID?: number }
+  ): Promise<UnsignedAction>;
+
+  buildTransferToPerps(
+    amount: number,
+    options?: { wallet?: string; accountID?: number }
+  ): Promise<UnsignedAction>;
+
+  buildTransferToSpot(
+    amount: number,
+    options?: { wallet?: string; accountID?: number }
+  ): Promise<UnsignedAction>;
 }
 
 export interface DexConfig {

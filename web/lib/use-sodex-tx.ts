@@ -1,9 +1,12 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import type { UnsignedAction, SignedAction } from "@/lib/dex/types";
-import { PERPS_BASE, GW_BASE } from "@/lib/dex/sodex-adapter";
+import { PERPS_BASE, GW_BASE, getChainId } from "@/lib/dex/sodex-adapter";
+
+const SODEX_CHAIN_ID = 138565;
+const SODEX_CHAIN_HEX = "0x21d85";
 
 // Raw EIP712 signing via window.ethereum
 async function rawSignTypedData(
@@ -27,22 +30,83 @@ async function rawSignTypedData(
 
 export function useSodexTx() {
   const { address, isConnected } = useAccount();
+  const [walletChainId, setWalletChainId] = useState<number>(1);
+  const [needsNetworkSwitch, setNeedsNetworkSwitch] = useState(false);
+
+  // Poll current chainId
+  useEffect(() => {
+    if (!isConnected) { setWalletChainId(1); setNeedsNetworkSwitch(false); return; }
+    const ethereum = (typeof window !== "undefined" && (window as any).ethereum) as any;
+    if (!ethereum) return;
+
+    const check = async () => {
+      try {
+        const hex = await ethereum.request({ method: "eth_chainId" });
+        const id = parseInt(hex, 16);
+        setWalletChainId(id);
+        setNeedsNetworkSwitch(id !== SODEX_CHAIN_ID);
+      } catch {}
+    };
+    check();
+
+    if (ethereum.on) {
+      const handler = (chainId: string) => {
+        const id = parseInt(chainId, 16);
+        setWalletChainId(id);
+        setNeedsNetworkSwitch(id !== SODEX_CHAIN_ID);
+      };
+      ethereum.on("chainChanged", handler);
+      return () => { ethereum.removeListener?.("chainChanged", handler); };
+    }
+  }, [isConnected]);
+
+  const switchToSodex = useCallback(async () => {
+    const ethereum = (typeof window !== "undefined" && (window as any).ethereum) as any;
+    if (!ethereum) throw new Error("MetaMask not found");
+
+    try {
+      await ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: SODEX_CHAIN_HEX }],
+      });
+    } catch (switchError: any) {
+      if (switchError.code === 4902) {
+        try {
+          await ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [{
+              chainId: SODEX_CHAIN_HEX,
+              chainName: "SoDEX Testnet",
+              nativeCurrency: { name: "SOSO", symbol: "SOSO", decimals: 18 },
+              rpcUrls: ["http://127.0.0.1:8545"],
+              blockExplorerUrls: [],
+            }],
+          });
+          await ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: SODEX_CHAIN_HEX }],
+          });
+        } catch {
+          throw new Error("Please add SoDEX Testnet manually in MetaMask settings.");
+        }
+      } else {
+        throw switchError;
+      }
+    }
+  }, []);
 
   const signAction = useCallback(
     async (action: UnsignedAction): Promise<SignedAction> => {
       if (!address) throw new Error("Wallet not connected");
       if (!isConnected) throw new Error("Wallet disconnected");
 
-      // Get wallet's current chainId (official sends signatureChainID: 1)
       const ethereum = (typeof window !== "undefined" && (window as any).ethereum) as any;
-      let walletChainId = 1;
-      try {
-        const hex = await ethereum.request({ method: "eth_chainId" });
-        walletChainId = parseInt(hex, 16);
-      } catch {}
+      let currentChainId = walletChainId;
 
-      // Use wallet chainId in domain so MetaMask accepts it
-      const domain = { ...action.domain, chainId: walletChainId };
+      // SoDEX testnet requires chainId 138565 in the signing domain.
+      // If MetaMask is not on 138565, we try to sign anyway — the server
+      // may accept it via headers, or MetaMask may allow it.
+      const domain = { ...action.domain, chainId: SODEX_CHAIN_ID };
 
       const signature = await rawSignTypedData(address, domain, {
         EIP712Domain: [
@@ -67,27 +131,29 @@ export function useSodexTx() {
       const prefix = action.payload.type === "addAPIKey" ? "02" : "01";
       const typedSignature = `0x${prefix}${normalizedSig.slice(2)}` as `0x${string}`;
 
-      const signedAction: SignedAction = {
+      return {
         type: action.payload.type,
         params: action.params,
         signature: typedSignature,
         nonce: action.message.nonce,
         endpoint: action.endpoint || "/exchange",
-        signatureChainID: walletChainId,
+        signatureChainID: SODEX_CHAIN_ID,
       };
-      // eslint-disable-next-line no-console
-      console.log("[SodexTx] signed action:", signedAction);
-      return signedAction;
     },
-    [address, isConnected]
+    [address, isConnected, walletChainId]
   );
 
   const sendAction = useCallback(
     async (signed: SignedAction): Promise<{ success: boolean; data?: unknown; error?: string }> => {
       try {
-        const url = signed.type === "addAPIKey"
-          ? `${GW_BASE}/api/v1/spot/exchange`
-          : `${PERPS_BASE}/exchange`;
+        let url: string;
+        if (signed.endpoint?.includes("/spot/")) {
+          url = `${GW_BASE}${signed.endpoint}`;
+        } else if (signed.type === "addAPIKey") {
+          url = `${GW_BASE}/api/v1/spot/exchange`;
+        } else {
+          url = `${PERPS_BASE}/exchange`;
+        }
 
         const body = {
           type: signed.type,
@@ -98,13 +164,24 @@ export function useSodexTx() {
         };
 
         // eslint-disable-next-line no-console
-        console.log("[SodexTx] POST", url, JSON.stringify(body, null, 2));
+        console.log("[SodexTx] POST", url);
+        // eslint-disable-next-line no-console
+        console.log("[SodexTx] headers:", {
+          "X-API-Key": address,
+          "X-API-Nonce": signed.nonce,
+          "X-API-Sign": signed.signature.slice(0, 20) + "...",
+        });
+        // eslint-disable-next-line no-console
+        console.log("[SodexTx] body:", JSON.stringify(body, null, 2));
 
         const res = await fetch(url, {
           method: "POST",
           headers: {
             "Content-Type": "application/json;charset=UTF-8",
             "Accept": "application/json, text/plain, */*",
+            "X-API-Key": address || "",
+            "X-API-Nonce": String(signed.nonce),
+            "X-API-Sign": signed.signature,
           },
           credentials: "omit",
           body: JSON.stringify(body),
@@ -122,7 +199,7 @@ export function useSodexTx() {
         return { success: false, error: err instanceof Error ? err.message : String(err) };
       }
     },
-    []
+    [address]
   );
 
   const sendInstructions = useCallback(
@@ -133,5 +210,14 @@ export function useSodexTx() {
     [signAction, sendAction]
   );
 
-  return { address, isConnected, signAction, sendAction, sendInstructions };
+  return {
+    address,
+    isConnected,
+    walletChainId,
+    needsNetworkSwitch,
+    switchToSodex,
+    signAction,
+    sendAction,
+    sendInstructions,
+  };
 }

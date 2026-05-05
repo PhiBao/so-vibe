@@ -32,7 +32,7 @@ export async function GET(request: Request) {
       sentiment: item.sentiment || item.tag || null,
     }));
 
-    const result = { articles, type };
+    const result = { articles: normalized, type };
     cache = { data: result, time: Date.now() };
     return NextResponse.json(result);
   } catch (err: unknown) {

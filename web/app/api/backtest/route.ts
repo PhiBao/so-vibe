@@ -13,9 +13,16 @@ export async function POST(request: Request) {
   try {
     await initDex();
     const adapter = getAdapter();
-    const candles = await adapter.getCandles(symbol, "1h", 1000);
+    let candles;
+    try {
+      candles = await adapter.getCandles(symbol, "1h", 1000);
+    } catch {
+      // Fallback to synthetic candles for testnet
+      const { generateSyntheticCandles } = await import("@/lib/dex/sodex-adapter");
+      candles = generateSyntheticCandles(symbol, 1000);
+    }
 
-    if (candles.length < 100) {
+    if (!candles || candles.length < 100) {
       return NextResponse.json({ error: "Insufficient candle data" }, { status: 400 });
     }
 

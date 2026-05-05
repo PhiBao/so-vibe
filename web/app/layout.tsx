@@ -5,8 +5,8 @@ import TerminalLayout from "@/components/TerminalLayout";
 import { ToastProvider } from "@/components/ToastProvider";
 
 export const metadata: Metadata = {
-  title: "SWARM TERMINAL v3 — DEX-Agnostic Perp Trading",
-  description: "Cyberpunk terminal for perpetuals — multi-strategy swarm trading across DEXes",
+  title: "SoVibe — AI-Powered Perp Trading Terminal",
+  description: "Agentic swarm trading on SoDEX perpetuals with SoSoValue sentiment integration",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

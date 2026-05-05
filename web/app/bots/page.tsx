@@ -40,35 +40,8 @@ const DEFAULT_CONFIG: BotConfig = {
   interval: 60,
 };
 
-// Markets are fetched dynamically from /api/markets (SoDEX adapter)
-const ALL_MARKETS: string[] = [];
-
-function loadLogs(): string[] {
-  try {
-    const raw = localStorage.getItem("bot-logs");
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return [];
-}
-
 function saveLogs(logs: string[]) {
   try { localStorage.setItem("bot-logs", JSON.stringify(logs.slice(-30))); } catch {}
-}
-
-function loadConfig(): BotConfig {
-  try {
-    const raw = localStorage.getItem("bot-config");
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return {
-        minConfidence: typeof parsed.minConfidence === "number" ? parsed.minConfidence : DEFAULT_CONFIG.minConfidence,
-        maxMarginPct: typeof parsed.maxMarginPct === "number" ? parsed.maxMarginPct : DEFAULT_CONFIG.maxMarginPct,
-        symbols: Array.isArray(parsed.symbols) ? parsed.symbols : DEFAULT_CONFIG.symbols,
-        interval: typeof parsed.interval === "number" ? parsed.interval : DEFAULT_CONFIG.interval,
-      };
-    }
-  } catch {}
-  return DEFAULT_CONFIG;
 }
 
 function persistConfig(config: BotConfig) {
@@ -77,7 +50,7 @@ function persistConfig(config: BotConfig) {
 
 export default function BotsPage() {
   const { address, isConnected } = useAccount();
-  const { sendInstructions } = useSodexTx();
+  const { sendInstructions, needsNetworkSwitch, walletChainId } = useSodexTx();
   const { addToast } = useToast();
 
   const [mounted, setMounted] = useState(false);
@@ -314,8 +287,9 @@ export default function BotsPage() {
           });
           const sltpData = await sltpRes.json();
           if (sltpData.success && sltpData.actions) {
-            for (const action of sltpData.actions) {
-              await sendInstructions(action);
+            for (let i = 0; i < sltpData.actions.length; i++) {
+              if (i > 0) await new Promise((r) => setTimeout(r, 100));
+              await sendInstructions(sltpData.actions[i]);
             }
           }
         } catch {
@@ -342,17 +316,26 @@ export default function BotsPage() {
   if (!mounted) {
     return (
       <div className="flex items-center justify-center h-[80vh]">
-        <div className="text-[var(--text-dim)] font-mono text-sm"><span className="text-[var(--cyan)]">&gt;</span> loading bot module...<span className="animate-blink">_</span></div>
+        <div className="text-[var(--text-secondary)] font-mono text-sm"><span className="text-[var(--cyan)]">&gt;</span> loading bot module...<span className="animate-blink">_</span></div>
       </div>
     );
   }
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-in">
+      {isConnected && needsNetworkSwitch && (
+        <div className="terminal-card p-3 border-l-2 border-l-[var(--yellow)]">
+          <div className="text-[11px] font-mono text-[var(--yellow)]">
+            <div>⚠ WRONG NETWORK — MetaMask on chain {walletChainId}, SoDEX requires 138565</div>
+            <div>Add SoDEX Testnet manually: MetaMask → Settings → Networks → Add Network</div>
+            <div>Name: SoDEX Testnet | Chain ID: 138565 | Currency: SOSO</div>
+          </div>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-lg font-bold text-[var(--cyan)] glow-cyan tracking-wider">BOT_CONTROL</h1>
-          <p className="text-[11px] text-[var(--text-dim)] font-mono mt-1">Strategy swarm automation — server-side analysis, client-side execution</p>
+          <p className="text-[11px] text-[var(--text-secondary)] font-mono mt-1">Strategy swarm automation — server-side analysis, client-side execution</p>
         </div>
         <div className="flex items-center gap-3">
           <button
@@ -377,11 +360,11 @@ export default function BotsPage() {
         <div className="flex items-center gap-3">
           <span className={`status-dot ${running ? "online" : "offline"}`} />
           <span className={`text-[12px] font-mono font-bold ${running ? "text-[var(--green)]" : "text-[var(--red)]"}`}>
-            SWARM_BOT {running ? "RUNNING" : "OFFLINE"}
+            SOVIBE_BOT {running ? "RUNNING" : "OFFLINE"}
           </span>
           {running && (
             <>
-              <span className="text-[var(--text-dim)]">|</span>
+              <span className="text-[var(--text-secondary)]">|</span>
               <span className="text-[10px] text-[var(--text-secondary)] font-mono">
                 Scanning: {config.symbols.join(", ")} · Interval: {config.interval}s
               </span>
@@ -397,7 +380,7 @@ export default function BotsPage() {
       <div className="terminal-card">
         <div className="terminal-header">
           <span className="text-[11px] font-bold tracking-wider">PENDING_SIGNALS</span>
-          <span className="text-[10px] text-[var(--text-dim)] ml-auto">{signals.length} from latest cycle</span>
+          <span className="text-[10px] text-[var(--text-secondary)] ml-auto">{signals.length} from latest cycle</span>
         </div>
         <div className="p-4">
           {executeError && (
@@ -406,7 +389,7 @@ export default function BotsPage() {
             </div>
           )}
           {signals.length === 0 ? (
-            <div className="text-center py-6 text-[var(--text-dim)] text-[12px] font-mono">
+            <div className="text-center py-6 text-[var(--text-secondary)] text-[12px] font-mono">
               {running ? "No signals this cycle. Bot is scanning markets..." : "Start the bot to generate signals."}
             </div>
           ) : (
@@ -423,9 +406,9 @@ export default function BotsPage() {
                           {sig.side.toUpperCase()}
                         </span>
                         <span className="text-[14px] font-mono font-bold text-[var(--cyan)]">{sig.symbol}</span>
-                        <span className="text-[10px] text-[var(--text-dim)] font-mono">@{sig.entryPrice.toFixed(2)}</span>
+                        <span className="text-[10px] text-[var(--text-secondary)] font-mono">@{sig.entryPrice.toFixed(2)}</span>
                         {sentimentDetail && (
-                          <span className={`text-[9px] px-1.5 py-0.5 border ${sentimentDetail.signal === "bullish" ? "border-[var(--green)]/30 text-[var(--green)]" : sentimentDetail.signal === "bearish" ? "border-[var(--red)]/30 text-[var(--red)]" : "border-[var(--text-dim)] text-[var(--text-dim)]"}`}>
+                          <span className={`text-[9px] px-1.5 py-0.5 border ${sentimentDetail.signal === "bullish" ? "border-[var(--green)]/30 text-[var(--green)]" : sentimentDetail.signal === "bearish" ? "border-[var(--red)]/30 text-[var(--red)]" : "border-[var(--text-dim)] text-[var(--text-secondary)]"}`}>
                             SoSoValue: {sentimentDetail.signal}
                           </span>
                         )}
@@ -433,14 +416,14 @@ export default function BotsPage() {
                       <div className="flex items-center gap-3">
                         <div className="text-[10px] font-mono text-right">
                           <div className="text-[var(--cyan)] font-bold">{(sig.confidence * 100).toFixed(0)}% CONFIDENCE</div>
-                          <div className="text-[var(--text-dim)]">▲{sig.longVotes} ▼{sig.shortVotes} votes</div>
+                          <div className="text-[var(--text-secondary)]">▲{sig.longVotes} ▼{sig.shortVotes} votes</div>
                         </div>
                         <button
                           onClick={() => handleExecute(sig)}
-                          disabled={!isConnected || executingId === sig.id}
-                          className="btn-terminal btn-terminal-green text-[10px] py-1.5 px-3 disabled:opacity-40"
+                          disabled={!isConnected || needsNetworkSwitch || executingId === sig.id}
+                          className={`btn-terminal text-[10px] py-1.5 px-3 disabled:opacity-40 ${needsNetworkSwitch ? "border-[var(--yellow)] text-black bg-[var(--yellow)]" : "btn-terminal-green"}`}
                         >
-                          {!isConnected ? "CONNECT" : executingId === sig.id ? "SIGNING..." : "[ EXECUTE ]"}
+                          {!isConnected ? "CONNECT" : needsNetworkSwitch ? "WRONG NET" : executingId === sig.id ? "SIGNING..." : "[ EXECUTE ]"}
                         </button>
                       </div>
                     </div>
@@ -448,11 +431,11 @@ export default function BotsPage() {
                     {/* Strategy vote bars */}
                     {stratDetails.length > 0 && (
                       <div className="space-y-1">
-                        <div className="text-[9px] text-[var(--text-dim)] uppercase tracking-wider">Strategy Consensus</div>
+                        <div className="text-[9px] text-[var(--text-secondary)] uppercase tracking-wider">Strategy Consensus</div>
                         <div className="flex gap-2 flex-wrap">
                           {stratDetails.map((d: any, i: number) => (
                             <div key={i} className="flex items-center gap-1.5 px-2 py-1 bg-black/30 border border-[var(--border)]">
-                              <span className={`text-[9px] ${parseFloat(d.signal) > 0 ? "text-[var(--green)]" : parseFloat(d.signal) < 0 ? "text-[var(--red)]" : "text-[var(--text-dim)]"}`}>
+                              <span className={`text-[9px] ${parseFloat(d.signal) > 0 ? "text-[var(--green)]" : parseFloat(d.signal) < 0 ? "text-[var(--red)]" : "text-[var(--text-secondary)]"}`}>
                                 {parseFloat(d.signal) > 0 ? "▲" : parseFloat(d.signal) < 0 ? "▼" : "◆"}
                               </span>
                               <span className="text-[9px] font-mono text-[var(--text-secondary)]">{d.name}</span>
@@ -466,13 +449,13 @@ export default function BotsPage() {
                     {/* Risk metrics row */}
                     <div className="flex items-center gap-4 text-[10px] font-mono text-[var(--text-secondary)] border-t border-[var(--border)] pt-2">
                       <span>{sig.size.toFixed(4)} units</span>
-                      <span className="text-[var(--text-dim)]">|</span>
+                      <span className="text-[var(--text-secondary)]">|</span>
                       <span>${(sig.size * sig.entryPrice).toFixed(2)} notional</span>
-                      <span className="text-[var(--text-dim)]">|</span>
+                      <span className="text-[var(--text-secondary)]">|</span>
                       <span className="text-[var(--red)]">SL: {sig.stopLoss.toFixed(2)}</span>
-                      <span className="text-[var(--text-dim)]">|</span>
+                      <span className="text-[var(--text-secondary)]">|</span>
                       <span className="text-[var(--green)]">TP: {sig.takeProfit.toFixed(2)}</span>
-                      <span className="text-[var(--text-dim)]">|</span>
+                      <span className="text-[var(--text-secondary)]">|</span>
                       <span>{sig.leverage}x lev</span>
                     </div>
                   </div>
@@ -492,14 +475,14 @@ export default function BotsPage() {
           <div className="p-4 space-y-4">
             {/* Portfolio Value Display */}
             <div className="flex items-center justify-between py-2 px-3 bg-white/[0.02] border border-[var(--border)]">
-              <span className="text-[10px] text-[var(--text-dim)] uppercase tracking-[0.15em]">Portfolio</span>
+              <span className="text-[10px] text-[var(--text-secondary)] uppercase tracking-[0.15em]">Portfolio</span>
               <span className="text-[13px] font-mono text-[var(--cyan)]">${portfolioValue.toFixed(2)}</span>
             </div>
 
             <div>
-              <label className="text-[10px] text-[var(--text-dim)] uppercase tracking-[0.15em] mb-2 block">Markets</label>
+              <label className="text-[10px] text-[var(--text-secondary)] uppercase tracking-[0.15em] mb-2 block">Markets</label>
               {Object.keys(marketLimits).length === 0 ? (
-                <div className="text-[11px] text-[var(--text-dim)] font-mono">Loading available markets from SoDEX...</div>
+                <div className="text-[11px] text-[var(--text-secondary)] font-mono">Loading available markets from SoDEX...</div>
               ) : (
                 <div className="flex gap-2 flex-wrap">
                   {Object.keys(marketLimits).map((s) => {
@@ -514,10 +497,10 @@ export default function BotsPage() {
                             : [...config.symbols, s];
                           updateConfig({ symbols: next });
                         }}
-                        className={`py-1.5 px-3 text-[11px] font-mono border transition-all ${config.symbols.includes(s) ? "border-[var(--cyan)] text-[var(--cyan)] bg-[var(--cyan)]/10" : "border-[var(--border)] text-[var(--text-dim)]"}`}
+                        className={`py-1.5 px-3 text-[11px] font-mono border transition-all ${config.symbols.includes(s) ? "border-[var(--cyan)] text-[var(--cyan)] bg-[var(--cyan)]/10" : "border-[var(--border)] text-[var(--text-secondary)]"}`}
                       >
                         {s}
-                        <span className="text-[9px] text-[var(--text-dim)] ml-1">({maxLev}x)</span>
+                        <span className="text-[9px] text-[var(--text-secondary)] ml-1">({maxLev}x)</span>
                       </button>
                     );
                   })}
@@ -527,19 +510,19 @@ export default function BotsPage() {
 
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <label className="text-[10px] text-[var(--text-dim)] uppercase tracking-[0.15em]">Min Confidence: {(config.minConfidence * 100).toFixed(0)}%</label>
-                <span className="text-[9px] text-[var(--text-dim)] cursor-help" title="Minimum signal strength required before the bot queues a trade. Higher = fewer but stronger signals.">(?)</span>
+                <label className="text-[10px] text-[var(--text-secondary)] uppercase tracking-[0.15em]">Min Confidence: {(config.minConfidence * 100).toFixed(0)}%</label>
+                <span className="text-[9px] text-[var(--text-secondary)] cursor-help" title="Minimum signal strength required before the bot queues a trade. Higher = fewer but stronger signals.">(?)</span>
               </div>
               <input type="range" min={30} max={90} value={config.minConfidence * 100} onChange={(e) => updateConfig({ minConfidence: parseInt(e.target.value) / 100 })} className="w-full" />
             </div>
 
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <label className="text-[10px] text-[var(--text-dim)] uppercase tracking-[0.15em]">Max Margin: {config.maxMarginPct}%</label>
-                <span className="text-[9px] text-[var(--text-dim)] cursor-help" title="Percentage of your portfolio to use as margin per trade. 20% of $100 = $20 margin. Position size = margin × market max leverage.">(?)</span>
+                <label className="text-[10px] text-[var(--text-secondary)] uppercase tracking-[0.15em]">Max Margin: {config.maxMarginPct}%</label>
+                <span className="text-[9px] text-[var(--text-secondary)] cursor-help" title="Percentage of your portfolio to use as margin per trade. 20% of $100 = $20 margin. Position size = margin × market max leverage.">(?)</span>
               </div>
               <input type="range" min={5} max={100} value={config.maxMarginPct} onChange={(e) => updateConfig({ maxMarginPct: parseInt(e.target.value) })} className="w-full" />
-              <div className="flex justify-between text-[9px] text-[var(--text-dim)] font-mono mt-1">
+              <div className="flex justify-between text-[9px] text-[var(--text-secondary)] font-mono mt-1">
                 <span>5%</span>
                 <span>50%</span>
                 <span>100%</span>
@@ -548,8 +531,8 @@ export default function BotsPage() {
 
             <div>
               <div className="flex items-center gap-2 mb-2">
-                <label className="text-[10px] text-[var(--text-dim)] uppercase tracking-[0.15em]">Scan Interval: {config.interval}s</label>
-                <span className="text-[9px] text-[var(--text-dim)] cursor-help" title="How often the bot analyzes markets and generates signals.">(?)</span>
+                <label className="text-[10px] text-[var(--text-secondary)] uppercase tracking-[0.15em]">Scan Interval: {config.interval}s</label>
+                <span className="text-[9px] text-[var(--text-secondary)] cursor-help" title="How often the bot analyzes markets and generates signals.">(?)</span>
               </div>
               <input type="range" min={10} max={300} step={10} value={config.interval} onChange={(e) => updateConfig({ interval: parseInt(e.target.value) })} className="w-full" />
             </div>
@@ -563,13 +546,13 @@ export default function BotsPage() {
           <div className="terminal-header">
             <span className="text-[11px] font-bold tracking-wider">BOT_LOG</span>
             <div className="flex items-center gap-3 ml-auto">
-              <span className="text-[10px] text-[var(--text-dim)]">{logs.length} entries</span>
+              <span className="text-[10px] text-[var(--text-secondary)]">{logs.length} entries</span>
               <button onClick={clearLogs} className="text-[10px] text-[var(--red)] hover:underline">[ clear ]</button>
             </div>
           </div>
           <div ref={logContainerRef} className="flex-1 overflow-y-auto p-4 font-mono text-[11px] space-y-1 bg-black/30">
             {logs.length === 0 ? (
-              <div className="text-[var(--text-dim)] py-4">{running ? "Waiting for log output..." : "Bot is offline. Start to see logs."}</div>
+              <div className="text-[var(--text-secondary)] py-4">{running ? "Waiting for log output..." : "Bot is offline. Start to see logs."}</div>
             ) : (
               logs.map((line, i) => {
                 const isError = line.includes("ERR") || line.includes("error") || line.includes("failed");
@@ -605,7 +588,7 @@ export default function BotsPage() {
                 <tr key={s.name}>
                   <td className="text-[var(--cyan)] font-mono">{s.name}</td>
                   <td className="text-[var(--text-secondary)]">{s.signal}</td>
-                  <td className="text-[var(--text-dim)]">{s.best}</td>
+                  <td className="text-[var(--text-secondary)]">{s.best}</td>
                   <td className="text-[var(--text-secondary)] font-mono">{s.weight}</td>
                   <td><span className="flex items-center gap-1.5"><span className="status-dot online" /><span className="text-[var(--green)] text-[10px]">{s.status}</span></span></td>
                 </tr>

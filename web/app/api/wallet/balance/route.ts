@@ -24,6 +24,8 @@ export async function GET(request: Request) {
     ]);
 
     const usdc = traderState.collateral;
+    const spot = (traderState as any).spot || usdc;
+    const perp = (traderState as any).perp || usdc;
     const positions = traderState.positions.map((p) => ({
       symbol: p.symbol,
       side: p.side,
@@ -36,6 +38,8 @@ export async function GET(request: Request) {
     return NextResponse.json({
       address,
       usdc,
+      spot,
+      perp,
       positions,
       subaccounts: traderState.positions.length > 0 ? 1 : 0,
       accountID: accountID || null,

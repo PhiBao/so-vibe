@@ -24,6 +24,7 @@ import type {
 
 const GW_BASE = "https://testnet-gw.sodex.dev";
 const PERPS_BASE = `${GW_BASE}/api/v1/perps`;
+const SPOT_BASE = `${GW_BASE}/api/v1/spot`;
 const FUTURES_BASE = `${GW_BASE}/futures/fapi/market/v1/public`;
 const QUOTATION_BASE = `${GW_BASE}/pro/p/quotation`;
 const TESTNET_CHAIN_ID = 138565;
@@ -88,6 +89,15 @@ function getDomain(): EIP712Domain {
   };
 }
 
+function getSpotDomain(): EIP712Domain {
+  return {
+    name: "spot",
+    version: "1",
+    chainId: getChainId(),
+    verifyingContract: "0x0000000000000000000000000000000000000000",
+  };
+}
+
 // Round quantity to symbol's valid precision and step size
 function formatQuantity(qty: number, market: MarketInfo | null): string {
   const precision = market?.quantityPrecision ?? 4;
@@ -98,7 +108,16 @@ function formatQuantity(qty: number, market: MarketInfo | null): string {
   const qtyInt = Math.round(qty * scale);
   const roundedInt = Math.floor(qtyInt / stepInt) * stepInt;
   const rounded = roundedInt / scale;
-  return rounded.toFixed(precision);
+  // Strip trailing zeros — server rejects "80.070", accepts "80.07"
+  return parseFloat(rounded.toFixed(precision)).toString();
+}
+
+// Round price to symbol's tick size
+function formatPrice(price: number, market: MarketInfo | null): string {
+  const tick = market?.tickSize ?? 0.01;
+  const precision = tick < 1 ? Math.ceil(-Math.log10(tick)) : 0;
+  const rounded = Math.round(price / tick) * tick;
+  return parseFloat(rounded.toFixed(precision)).toString();
 }
 
 function checkOrderFilters(size: number, price: number, market: MarketInfo | null): string | null {
@@ -257,15 +276,31 @@ export const sodexAdapter: DexAdapter = {
   // ─── Trader State ──────────────────────────────────────────
 
   async getTraderState(walletAddress) {
-    const stateRes = await sodexGet(`${PERPS_BASE}/accounts/${walletAddress}/state`);
+    // Fetch perps state and spot balances in parallel
+    const [stateRes, spotRes] = await Promise.all([
+      sodexGet(`${PERPS_BASE}/accounts/${walletAddress}/state`),
+      sodexGet(`${SPOT_BASE}/accounts/${walletAddress}/balances`).catch(() => null),
+    ]);
     const state = stateRes?.data;
 
-    // Parse balances from state.B (array of balance objects)
+    // Parse perps balances from state.B
     const balances = state?.B || [];
     const usdcBalance = balances.find((b: any) => b.a === "vUSDC" || b.a === "USDC");
-    const collateral = parseFloat(usdcBalance?.wb || usdcBalance?.t || 0);
 
-    // Parse positions from state.P (array of position objects)
+    // Perps wallet fields:
+    // wb = wallet balance (total)
+    // aw = available wallet (free/spot)
+    // am = available margin (perp/trading)
+    const total = parseFloat(usdcBalance?.wb || usdcBalance?.t || 0);
+    const perp = parseFloat(usdcBalance?.am || 0);
+    const marginUsed = parseFloat(usdcBalance?.wm || 0);
+
+    // Parse spot balance from spot API
+    const spotBalances = spotRes?.data?.balances || [];
+    const spotUSDC = spotBalances.find((b: any) => b.coin === "vUSDC" || b.coin === "USDC");
+    const spot = parseFloat(spotUSDC?.total || 0);
+
+    // Parse positions from state.P
     const positionsRaw = state?.P || [];
     const positions = positionsRaw.map((p: any) => ({
       symbol: p.s,
@@ -276,7 +311,7 @@ export const sodexAdapter: DexAdapter = {
       leverage: p.l || 1,
     }));
 
-    return { collateral, positions };
+    return { collateral: total, spot, perp, marginUsed, positions };
   },
 
   // ─── Price Helpers ─────────────────────────────────────────
@@ -306,17 +341,18 @@ export const sodexAdapter: DexAdapter = {
     const filterErr = checkOrderFilters(parseFloat(qtyStr), price || market.tickSize, market);
     if (filterErr) throw new Error(filterErr);
 
+    // Go struct field order: clOrdID, modifier, side, type, timeInForce, price, quantity, funds, stopPrice, stopType, triggerType, reduceOnly, positionSide
     const order: any = {
       clOrdID,
       modifier: 1,
       side: toSodexSide(side),
       type: 2,
       timeInForce: 3,
-      quantity: qtyStr,
-      reduceOnly: false,
-      positionSide: 1,
     };
-    if (price > 0) order.price = String(price);
+    if (price > 0) order.price = formatPrice(price, market);
+    order.quantity = qtyStr;
+    order.reduceOnly = false;
+    order.positionSide = 1;
 
     const payload: SodexOrderPayload = {
       type: "newOrder",
@@ -380,20 +416,22 @@ export const sodexAdapter: DexAdapter = {
     const size = options?.size || 0;
     const qtyStr = size > 0 ? formatQuantity(size, market) : undefined;
 
+    // Go struct field order
+    const priceStr = formatPrice(triggerPrice, market);
     const order: any = {
       clOrdID,
       modifier: 2,
       side: closeSide(side),
       type: 1,
       timeInForce: 1,
-      price: String(triggerPrice),
-      stopPrice: String(triggerPrice),
-      stopType: 1,
-      triggerType: 2,
-      reduceOnly: true,
-      positionSide: 1,
+      price: priceStr,
     };
     if (qtyStr) order.quantity = qtyStr;
+    order.stopPrice = priceStr;
+    order.stopType = 1;
+    order.triggerType = 2;
+    order.reduceOnly = true;
+    order.positionSide = 1;
 
     const payload: SodexOrderPayload = {
       type: "newOrder",
@@ -417,20 +455,22 @@ export const sodexAdapter: DexAdapter = {
     const size = options?.size || 0;
     const qtyStr = size > 0 ? formatQuantity(size, market) : undefined;
 
+    // Go struct field order
+    const priceStr = formatPrice(triggerPrice, market);
     const order: any = {
       clOrdID,
       modifier: 2,
       side: closeSide(side),
       type: 1,
       timeInForce: 1,
-      price: String(triggerPrice),
-      stopPrice: String(triggerPrice),
-      stopType: 2,
-      triggerType: 2,
-      reduceOnly: true,
-      positionSide: 1,
+      price: priceStr,
     };
     if (qtyStr) order.quantity = qtyStr;
+    order.stopPrice = priceStr;
+    order.stopType = 2;
+    order.triggerType = 2;
+    order.reduceOnly = true;
+    order.positionSide = 1;
 
     const payload: SodexOrderPayload = {
       type: "newOrder",
@@ -477,71 +517,103 @@ export const sodexAdapter: DexAdapter = {
     action.message.nonce = nonce;
     return action;
   },
+
+  async buildUpdateMargin(symbol, amount, type, options) {
+    const market = await this.getMarket(symbol);
+    const symbolID = market?.symbolID ?? 0;
+    const accountID = options?.accountID ?? (options?.wallet ? await getAccountID(options.wallet) : 0);
+    const nonce = options?.wallet ? getNonce(options.wallet) : Date.now();
+
+    const payload = {
+      type: "updateMargin",
+      params: {
+        accountID,
+        symbolID,
+        amount: String(Math.abs(amount)),
+        type: type === "add" ? 1 : 2,
+      },
+    };
+
+    const action = buildUnsignedAction(payload, "/exchange");
+    action.message.nonce = nonce;
+    return action;
+  },
+
+  async buildTransferToPerps(amount, options) {
+    // Spot -> Perp transfer goes through SPOT exchange endpoint
+    // Need spot account ID as sender
+    let spotAccountID = options?.accountID ?? 0;
+    const nonce = options?.wallet ? getNonce(options.wallet) : Date.now();
+
+    if (options?.wallet && !spotAccountID) {
+      try {
+        const spotState = await sodexGet(`${SPOT_BASE}/accounts/${options.wallet}/state`);
+        spotAccountID = spotState?.data?.aid ?? 0;
+      } catch {}
+    }
+
+    const payload = {
+      type: "transferAsset",
+      params: {
+        id: nonce,
+        fromAccountID: spotAccountID,
+        toAccountID: 999,
+        coinID: 0, // vUSDC
+        amount: parseFloat(amount.toFixed(2)).toString(),
+        type: 3, // PERPS_WITHDRAW
+      },
+    };
+
+    const payloadHash = computePayloadHash(payload);
+    const domain = getSpotDomain();
+    const message: EIP712Message = {
+      payloadHash,
+      nonce,
+    };
+
+    return {
+      payload: payload as any,
+      payloadHash,
+      domain,
+      message,
+      endpoint: "/api/v1/spot/exchange",
+      params: payload.params,
+    };
+  },
+
+  async buildTransferToSpot(amount, options) {
+    const accountID = options?.accountID ?? (options?.wallet ? await getAccountID(options.wallet) : 0);
+    const nonce = options?.wallet ? getNonce(options.wallet) : Date.now();
+
+    const payload = {
+      type: "transferAsset",
+      params: {
+        id: nonce,
+        fromAccountID: accountID,
+        toAccountID: 999,
+        coinID: 0, // vUSDC
+        amount: parseFloat(amount.toFixed(2)).toString(),
+        type: 5, // SPOT_WITHDRAW
+      },
+    };
+
+    const payloadHash = computePayloadHash(payload);
+    const domain = getDomain();
+    const message: EIP712Message = {
+      payloadHash,
+      nonce,
+    };
+
+    return {
+      payload: payload as any,
+      payloadHash,
+      domain,
+      message,
+      endpoint: "/exchange",
+      params: payload.params,
+    };
+  },
 };
-
-// ─── API Key Management ────────────────────────────────────
-
-export interface APIKeyInfo {
-  name: string;
-  publicKey: string;
-  keyType: number;
-  expiresAt: number;
-}
-
-/** Check if account has any registered API keys */
-export async function hasAPIKey(walletAddress: string): Promise<boolean> {
-  const data = await sodexGet(`${PERPS_BASE}/accounts/${walletAddress}/state`);
-  const keys = data?.data?.apiKeys ?? data?.data?.K ?? [];
-  return Array.isArray(keys) && keys.length > 0;
-}
-
-/** List registered API keys for an account */
-export async function listAPIKeys(walletAddress: string): Promise<APIKeyInfo[]> {
-  const data = await sodexGet(`${PERPS_BASE}/accounts/${walletAddress}/state`);
-  const keys = data?.data?.apiKeys ?? data?.data?.K ?? [];
-  return keys.map((k: any) => ({
-    name: k.name ?? k.n ?? "",
-    publicKey: k.publicKey ?? k.pk ?? "",
-    keyType: k.keyType ?? k.kt ?? 0,
-    expiresAt: k.expiresAt ?? k.ea ?? 0,
-  }));
-}
-
-/** Build an addAPIKey unsigned action */
-export async function buildAddAPIKey(walletAddress: string): Promise<UnsignedAction> {
-  const accountID = await getAccountID(walletAddress);
-  const nonce = getNonce(walletAddress);
-  const expiresAt = nonce + 7 * 24 * 60 * 60 * 1000; // 7 days from nonce in ms
-
-  const payload = {
-    type: "addAPIKey",
-    params: {
-      accountID,
-      name: "webkey",
-      type: 1,
-      publicKey: walletAddress,
-      expiresAt,
-    },
-  };
-
-  const action = buildUnsignedAction(payload, "/exchange");
-  action.message.nonce = nonce;
-  return action;
-}
-
-// ─── Additional Real API Helpers (not in DexAdapter interface) ─
-
-/** Fetch aggregated tickers from SoDEX futures market API */
-export async function getAggTickers() {
-  const data = await sodexGet(`${FUTURES_BASE}/q/agg-tickers`);
-  return data?.data || [];
-}
-
-/** Fetch quotation tickers from SoDEX pro API */
-export async function getQuotationTickers() {
-  const data = await sodexGet(`${QUOTATION_BASE}/tickers`);
-  return data?.data || [];
-}
 
 // ─── Synthetic Candle Fallback (for testnet when klines are unavailable) ─
 

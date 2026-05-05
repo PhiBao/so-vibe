@@ -149,7 +149,7 @@ export default function PositionsPage() {
   };
 
   if (loading) return (
-    <div className="flex items-center justify-center h-[80vh] text-[var(--text-dim)] font-mono">
+    <div className="flex items-center justify-center h-[80vh] text-[var(--text-secondary)] font-mono">
       <span className="text-[var(--cyan)]">&gt;</span> loading positions...<span className="animate-blink">_</span>
     </div>
   );
@@ -158,7 +158,7 @@ export default function PositionsPage() {
     <div className="max-w-5xl mx-auto space-y-6 animate-in">
       <div>
         <h1 className="text-lg font-bold text-[var(--cyan)] glow-cyan tracking-wider">POSITION_MONITOR</h1>
-        <p className="text-[11px] text-[var(--text-dim)] font-mono mt-1">On-chain positions from SoDEX perpetuals</p>
+        <p className="text-[11px] text-[var(--text-secondary)] font-mono mt-1">On-chain positions from SoDEX perpetuals</p>
       </div>
 
       {isConnected && (
@@ -185,11 +185,11 @@ export default function PositionsPage() {
       <div className="terminal-card">
         <div className="terminal-header">
           <span className="text-[11px] font-bold tracking-wider">OPEN_POSITIONS</span>
-          <span className="text-[10px] text-[var(--text-dim)] ml-auto">{positions.length} active {onChainPositions.length > 0 ? "(on-chain)" : ""}</span>
+          <span className="text-[10px] text-[var(--text-secondary)] ml-auto">{positions.length} active {onChainPositions.length > 0 ? "(on-chain)" : ""}</span>
         </div>
         <div className="p-4">
           {positions.length === 0 ? (
-            <div className="text-center py-8 text-[var(--text-dim)] text-[12px] font-mono">
+            <div className="text-center py-8 text-[var(--text-secondary)] text-[12px] font-mono">
               {isConnected ? "No open positions on SoDEX" : "Connect wallet to see on-chain positions"}
             </div>
           ) : (
@@ -202,19 +202,19 @@ export default function PositionsPage() {
                     </span>
                     <div>
                       <div className="text-[13px] font-mono font-semibold text-[var(--cyan)]">{pos.symbol}</div>
-                      {pos.source && <div className="text-[10px] text-[var(--text-dim)] font-mono">{pos.source}</div>}
+                      {pos.source && <div className="text-[10px] text-[var(--text-secondary)] font-mono">{pos.source}</div>}
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-[12px] font-mono font-medium">${pos.entryPrice.toFixed(2)}</div>
-                    <div className="text-[10px] text-[var(--text-dim)] font-mono">{pos.leverage ? `${pos.leverage}x · ` : ""}{pos.size.toFixed(4)} units</div>
+                    <div className="text-[10px] text-[var(--text-secondary)] font-mono">{pos.leverage ? `${pos.leverage}x · ` : ""}{pos.size.toFixed(4)} units</div>
                   </div>
                   <div className="text-right font-mono text-[11px]">
                     <div className={`font-bold ${pos.unrealizedPnl >= 0 ? "text-[var(--green)]" : "text-[var(--red)]"}`}>
                       {pos.unrealizedPnl >= 0 ? "+" : ""}${pos.unrealizedPnl.toFixed(2)}
                     </div>
                     {(pos.stopLoss || pos.takeProfit) && (
-                      <div className="text-[10px] text-[var(--text-dim)] mt-0.5">
+                      <div className="text-[10px] text-[var(--text-secondary)] mt-0.5">
                         {pos.stopLoss ? <>SL: <span className="text-[var(--red)]">${pos.stopLoss.toFixed(2)}</span></> : null}
                         {pos.stopLoss && pos.takeProfit ? <span className="mx-1">|</span> : null}
                         {pos.takeProfit ? <>TP: <span className="text-[var(--green)]">${pos.takeProfit.toFixed(2)}</span></> : null}
@@ -246,11 +246,11 @@ export default function PositionsPage() {
       <div className="terminal-card">
         <div className="terminal-header">
           <span className="text-[11px] font-bold tracking-wider">RECENT_EXITS</span>
-          <span className="text-[10px] text-[var(--text-dim)] ml-auto">last 20 trades</span>
+          <span className="text-[10px] text-[var(--text-secondary)] ml-auto">last 20 trades</span>
         </div>
         <div className="p-4">
           {recentTrades.length === 0 ? (
-            <div className="text-center py-8 text-[var(--text-dim)] text-[12px] font-mono">No trades yet</div>
+            <div className="text-center py-8 text-[var(--text-secondary)] text-[12px] font-mono">No trades yet</div>
           ) : (
             <div className="space-y-1">
               {recentTrades.map((t: Record<string, unknown>, i: number) => {
@@ -258,13 +258,13 @@ export default function PositionsPage() {
                 return (
                   <div key={i} className="flex items-center justify-between py-2 px-3 hover:bg-white/[0.02] border-b border-[var(--border)] last:border-0">
                     <div className="flex items-center gap-3">
-                      <span className="text-[var(--text-dim)]">{pnl >= 0 ? "▲" : "▼"}</span>
+                      <span className="text-[var(--text-secondary)]">{pnl >= 0 ? "▲" : "▼"}</span>
                       <span className={`text-[10px] font-bold px-2 py-0.5 border ${(t.side as string) === "long" ? "border-[var(--green)] text-[var(--green)]" : "border-[var(--red)] text-[var(--red)]"}`}>
                         {(t.side as string).toUpperCase()}
                       </span>
                       <span className="text-[12px] font-mono font-medium">{t.symbol as string}</span>
                     </div>
-                    <div className="text-[11px] text-[var(--text-dim)] font-mono">{t.reason as string}</div>
+                    <div className="text-[11px] text-[var(--text-secondary)] font-mono">{t.reason as string}</div>
                     <div className={`text-[12px] font-mono font-bold ${pnl >= 0 ? "text-[var(--green)]" : "text-[var(--red)]"}`}>
                       {pnl >= 0 ? "+" : ""}${pnl.toFixed(2)}
                     </div>

@@ -28,6 +28,4 @@ export function setSignals(signals: Signal[]) {
   lastCycleTime = Date.now();
 }
 
-export function clearSignals() {
-  latestSignals = [];
-}
+

@@ -151,16 +151,6 @@ export function writeBotConfig(config: any) {
   writeJson("bot-config.json", config);
 }
 
-// Bot logs
-export function logLine(line: string) {
-  appendLine("bot-log.jsonl", { line, time: Date.now() });
-}
-
-export function readLogs(limit = 200): string[] {
-  const lines = readLines("bot-log.jsonl");
-  return lines.slice(-limit).map((l: any) => l.line || l);
-}
-
 // Risk state
 export function readRiskState() {
   return readJson("risk-state.json", null);

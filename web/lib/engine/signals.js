@@ -227,10 +227,103 @@ export function VolumeBreakout(candles) {
   };
 }
 
+// ─── 6. SoSoValue Sentiment Strategy ───────────────────────
+// Treats external sentiment as a peer strategy with equal voting power
+export function SoSoValueSentiment(sentimentData) {
+  const { score = 0, confidence = 0, articleCount = 0 } = sentimentData || {};
+  // Only vote if we have meaningful confidence
+  if (confidence < 0.2 || articleCount === 0) {
+    return { name: "sosovalue_sentiment", signal: 0, confidence: 0, meta: { articleCount } };
+  }
+  // Sentiment score maps -1..1 to signal strength
+  // Strong sentiment (>0.6 conf) gets amplified
+  const signal = score * Math.min(1, confidence * 1.5);
+  return {
+    name: "sosovalue_sentiment",
+    signal: Math.max(-1, Math.min(1, signal)),
+    confidence: Math.min(1, confidence),
+    meta: { articleCount, rawScore: score },
+  };
+}
+
+// ─── Vibe Score ────────────────────────────────────────────
+// Aggregates sentiment + funding + technical consensus into a single vibe
+// 1.0 = extremely bullish vibe, -1.0 = extremely bearish, 0 = neutral
+export function computeVibeScore(strategies, sentiment, funding) {
+  const techSignal = strategies.filter(s => s.signal !== 0);
+  const techAvg = techSignal.length > 0
+    ? techSignal.reduce((sum, s) => sum + s.signal * s.confidence, 0) / techSignal.reduce((sum, s) => sum + s.confidence, 0)
+    : 0;
+  const techConf = techSignal.length > 0
+    ? techSignal.reduce((sum, s) => sum + s.confidence, 0) / techSignal.length
+    : 0;
+
+  const sentSignal = sentiment?.signal || 0;
+  const sentConf = sentiment?.confidence || 0;
+
+  const fundSignal = funding?.signal || 0;
+  const fundConf = funding?.confidence || 0;
+
+  // Vibe = weighted blend: 50% technical, 30% sentiment, 20% funding
+  const vibe = techAvg * 0.5 + sentSignal * 0.3 + fundSignal * 0.2;
+  const vibeConf = Math.min(1, techConf * 0.5 + sentConf * 0.3 + fundConf * 0.2 + 0.1);
+
+  // Consensus check: do all 3 agree?
+  const allLong = techAvg > 0.2 && sentSignal > 0.1 && fundSignal > 0;
+  const allShort = techAvg < -0.2 && sentSignal < -0.1 && fundSignal < 0;
+  const fullConsensus = allLong || allShort;
+
+  return {
+    vibe: Math.max(-1, Math.min(1, vibe)),
+    confidence: vibeConf,
+    fullConsensus,
+    breakdown: {
+      technical: { signal: techAvg, confidence: techConf },
+      sentiment: { signal: sentSignal, confidence: sentConf },
+      funding: { signal: fundSignal, confidence: fundConf },
+    },
+  };
+}
+
+// ─── AutoHedge Position Sizer ──────────────────────────────
+// Sizes up when vibe confirms technicals, sizes down (or hedges) when they conflict
+export function computePositionSize(baseSize, vibeScore, technicalSignal) {
+  const { vibe, confidence, fullConsensus } = vibeScore;
+  const alignment = vibe * technicalSignal; // positive = aligned, negative = conflict
+
+  let sizeMultiplier = 1.0;
+  if (fullConsensus) {
+    sizeMultiplier = 1.5; // All 3 agree → size up 50%
+  } else if (alignment > 0.3) {
+    sizeMultiplier = 1.25; // Strong alignment → size up 25%
+  } else if (alignment < -0.2) {
+    sizeMultiplier = 0.5; // Conflict → size down 50% (hedge)
+  } else if (alignment < 0) {
+    sizeMultiplier = 0.75; // Mild conflict → size down 25%
+  }
+
+  // Confidence scaling: high confidence = full size, low confidence = reduce
+  sizeMultiplier *= (0.5 + confidence * 0.5);
+
+  return {
+    size: baseSize * sizeMultiplier,
+    multiplier: sizeMultiplier,
+    isHedged: alignment < -0.2,
+    reason: fullConsensus ? "full_consensus" : alignment < -0.2 ? "hedge_conflict" : alignment < 0 ? "mild_conflict" : alignment > 0.3 ? "strong_alignment" : "neutral",
+  };
+}
+
 // ─── Swarm Synthesizer (combines all strategies) ───────────
-// options: { maxLeverage: number }
+// options: { maxLeverage: number, sentiment?: object, funding?: object }
 export function synthesizeSignals(strategies, currentPrice, options = {}) {
   const maxLeverage = options.maxLeverage || 1;
+  const sentiment = options.sentiment || null;
+  const funding = options.funding || null;
+
+  // Add SoSoValue as a peer strategy if available
+  if (sentiment) {
+    strategies = [...strategies, SoSoValueSentiment(sentiment)];
+  }
 
   // Weight by confidence
   let weightedSignal = 0;
@@ -277,6 +370,9 @@ export function synthesizeSignals(strategies, currentPrice, options = {}) {
   else if (adjustedConfidence < 0.5) holdReason = "low_confidence";
   else if (!hasConsensus) holdReason = strongDisagreement ? "strong_disagreement" : "no_consensus";
 
+  // Compute Vibe Score for position sizing
+  const vibeScore = computeVibeScore(strategies, sentiment, funding);
+
   // Best stop loss from highest confidence strategy
   const bestStrategy = strategies.filter(s => s.stopLoss).sort((a, b) => b.confidence - a.confidence)[0];
   const atr = strategies.find(s => s.meta?.atr)?.meta?.atr || currentPrice * 0.02;
@@ -284,23 +380,24 @@ export function synthesizeSignals(strategies, currentPrice, options = {}) {
   let stopLoss = bestStrategy?.stopLoss || null;
   let takeProfit = bestStrategy?.takeProfit || null;
 
-  if (!stopLoss && action === "long") stopLoss = currentPrice - atr * 1.5;
-  if (!stopLoss && action === "short") stopLoss = currentPrice + atr * 1.5;
-  if (!takeProfit && action === "long") takeProfit = currentPrice + atr * 3;
-  if (!takeProfit && action === "short") takeProfit = currentPrice - atr * 3;
+  if (!stopLoss && action === "long") stopLoss = Math.round((currentPrice - atr * 1.5) * 100) / 100;
+  if (!stopLoss && action === "short") stopLoss = Math.round((currentPrice + atr * 1.5) * 100) / 100;
+  if (!takeProfit && action === "long") takeProfit = Math.round((currentPrice + atr * 3) * 100) / 100;
+  if (!takeProfit && action === "short") takeProfit = Math.round((currentPrice - atr * 3) * 100) / 100;
 
   return {
     action,
     signal: Math.max(-1, Math.min(1, finalSignal)),
     confidence: adjustedConfidence,
     entryPrice: currentPrice,
-    stopLoss,
-    takeProfit,
-    leverage: maxLeverage, // use config leverage directly
+    stopLoss: stopLoss ? Math.round(stopLoss * 100) / 100 : null,
+    takeProfit: takeProfit ? Math.round(takeProfit * 100) / 100 : null,
+    leverage: maxLeverage,
     details,
     longVotes: longCount,
     shortVotes: shortCount,
     hasConsensus,
     holdReason,
+    vibeScore,
   };
 }

@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { buildAddAPIKey } from "@/lib/dex/sodex-adapter";
+import { getAdapter, initDex } from "@/lib/dex";
 import { defaultAuditor } from "@/lib/security";
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { wallet } = body;
+  const { wallet, amount } = body;
 
-  if (!wallet) {
-    return NextResponse.json({ error: "Missing wallet address" }, { status: 400 });
+  if (!wallet || typeof amount !== "number" || amount <= 0) {
+    return NextResponse.json({ error: "Missing wallet or invalid amount" }, { status: 400 });
   }
 
   if (!/^0x[a-fA-F0-9]{40}$/.test(wallet)) {
@@ -21,15 +21,17 @@ export async function POST(request: Request) {
   }
 
   try {
-    const action = await buildAddAPIKey(wallet);
+    await initDex();
+    const adapter = getAdapter();
+    const action = await adapter.buildTransferToPerps(amount, { wallet });
 
     return NextResponse.json({
       success: true,
       action,
-      message: "Sign transaction to enable trading on SoDEX",
+      message: `Sign transaction to deposit ${amount} USDC from spot to perps`,
     });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: `Enable trading failed: ${message}` }, { status: 500 });
+    return NextResponse.json({ error: `Deposit failed: ${message}` }, { status: 500 });
   }
 }

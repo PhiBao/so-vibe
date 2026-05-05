@@ -108,25 +108,29 @@ export async function POST(request: Request) {
 
       // Use market-specific max leverage from DEX
       const marketMaxLev = marketLimits[symbol]?.maxLeverage || 10;
+
+      // Pass sentiment and funding directly into synthesizer as peer strategies
+      const sentiment = sentimentMap[symbol];
+      const combined = synthesizeSignals(strategies, price, {
+        maxLeverage: marketMaxLev,
+        sentiment: sentiment || undefined,
+        funding: fundingSignal.signal !== 0 ? fundingSignal : undefined,
+      });
+
+      // Vibe Score position sizing (AutoHedge pattern)
+      const { computePositionSize } = await import("@/lib/engine/signals.js");
       const margin = portfolioValue * (maxMarginPct / 100);
       const notional = margin * marketMaxLev;
-      const positionSize = notional / price;
+      const baseSize = notional / price;
+      const sized = computePositionSize(baseSize, combined.vibeScore, combined.signal);
+      const positionSize = sized.size;
 
-      const combined = synthesizeSignals(strategies, price, { maxLeverage: marketMaxLev });
-      if (fundingSignal.signal !== 0) {
-        combined.signal = combined.signal * 0.8 + fundingSignal.signal * 0.2;
-        combined.confidence = Math.min(1, combined.confidence + fundingSignal.confidence * 0.1);
-      }
-
-      // Blend SoSoValue news sentiment
-      const sentiment = sentimentMap[symbol];
       if (sentiment && sentiment.confidence > 0) {
-        const sScore = sentiment.score; // -1..1
-        const sConf = sentiment.confidence;
-        // Sentiment acts as a tie-breaker / amplifier
-        combined.signal = combined.signal * (1 - sConf * 0.25) + sScore * sConf * 0.25;
-        combined.confidence = Math.min(1, combined.confidence + sConf * 0.1);
-        log(`    📰 SoSoValue sentiment: ${sScore > 0 ? "bullish" : sScore < 0 ? "bearish" : "neutral"} (${(sConf * 100).toFixed(0)}% conf, ${sentiment.articleCount} articles)`);
+        log(`    📰 SoSoValue sentiment: ${sentiment.score > 0 ? "bullish" : sentiment.score < 0 ? "bearish" : "neutral"} (${(sentiment.confidence * 100).toFixed(0)}% conf, ${sentiment.articleCount} articles)`);
+      }
+      if (combined.vibeScore) {
+        const v = combined.vibeScore;
+        log(`    🎵 Vibe: ${v.vibe > 0 ? "bullish" : v.vibe < 0 ? "bearish" : "neutral"} (${(v.confidence * 100).toFixed(0)}% conf, consensus: ${v.fullConsensus ? "YES" : "NO"})${sized.isHedged ? ` | HEDGE: size ${(sized.multiplier * 100).toFixed(0)}%` : ""}`);
       }
 
       const stratLog = strategies
