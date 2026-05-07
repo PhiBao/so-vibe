@@ -104,15 +104,20 @@ function TradeContent() {
     setResult(null);
     try {
       // Phase 1: Market order
-      // Add 5% slippage buffer so market order crosses the spread
-      const slippagePrice = side === "buy" ? price * 1.05 : price * 0.95;
+      // Use live orderbook price for market orders — best ask for buys, best bid for sells
+      const book = (market as any)?.book;
+      const bestAsk = book?.asks?.[0]?.price as number | undefined;
+      const bestBid = book?.bids?.[0]?.price as number | undefined;
+      const marketPrice = side === "buy"
+        ? (bestAsk || price) * 1.01  // 1% above ask for buys
+        : (bestBid || price) * 0.99; // 1% below bid for sells
       const res = await fetch("/api/trade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           symbol, side,
           size: sizeUnits,
-          price: slippagePrice,
+          price: marketPrice,
           leverage: maxLeverage,
           wallet: address,
         }),

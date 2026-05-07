@@ -6,7 +6,7 @@ import type { UnsignedAction, SignedAction } from "@/lib/dex/types";
 import { PERPS_BASE, GW_BASE, getChainId } from "@/lib/dex/sodex-adapter";
 
 const SODEX_CHAIN_ID = 138565;
-const SODEX_CHAIN_HEX = "0x21d85";
+const SODEX_CHAIN_HEX = "0x21d45";
 
 // Raw EIP712 signing via window.ethereum
 async function rawSignTypedData(

@@ -249,10 +249,12 @@ export const sodexAdapter: DexAdapter = {
 
   async getOrderbook(symbol) {
     const data = await sodexGet(`${PERPS_BASE}/markets/${symbol}/orderbook?limit=20`);
-    return {
-      bids: (data?.data?.bids || []).map((b: any[]) => ({ price: parseFloat(b[0]), size: parseFloat(b[1]) })),
-      asks: (data?.data?.asks || []).map((a: any[]) => ({ price: parseFloat(a[0]), size: parseFloat(a[1]) })),
-    } as Orderbook;
+    const bids = (data?.data?.bids || []).map((b: any[]) => ({ price: parseFloat(b[0]), size: parseFloat(b[1]) }));
+    const asks = (data?.data?.asks || []).map((a: any[]) => ({ price: parseFloat(a[0]), size: parseFloat(a[1]) }));
+    const bestBid = bids[0]?.price || 0;
+    const bestAsk = asks[0]?.price || 0;
+    const mid = bestBid > 0 && bestAsk > 0 ? (bestBid + bestAsk) / 2 : 0;
+    return { bids, asks, mid } as Orderbook;
   },
 
   async getFills(symbol) {
@@ -338,7 +340,18 @@ export const sodexAdapter: DexAdapter = {
 
     const price = options?.price || 0;
     const qtyStr = formatQuantity(size, market);
-    const filterErr = checkOrderFilters(parseFloat(qtyStr), price || market.tickSize, market);
+
+    // For market orders, always use live orderbook price — never stale data
+    // This ensures buy orders use ask-based price and sell orders use bid-based price
+    const book = await this.getOrderbook(symbol);
+    const bestAsk = book.asks?.[0]?.price || 0;
+    const bestBid = book.bids?.[0]?.price || 0;
+    const orderPrice = side === "buy" || side === "long"
+      ? bestAsk * 1.01  // 1% above ask for buys
+      : bestBid * 0.99; // 1% below bid for sells
+    if (!orderPrice) throw new Error(`No orderbook price for ${symbol}`);
+
+    const filterErr = checkOrderFilters(parseFloat(qtyStr), orderPrice, market);
     if (filterErr) throw new Error(filterErr);
 
     // Go struct field order: clOrdID, modifier, side, type, timeInForce, price, quantity, funds, stopPrice, stopType, triggerType, reduceOnly, positionSide
@@ -349,7 +362,7 @@ export const sodexAdapter: DexAdapter = {
       type: 2,
       timeInForce: 3,
     };
-    if (price > 0) order.price = formatPrice(price, market);
+    order.price = formatPrice(orderPrice, market);
     order.quantity = qtyStr;
     order.reduceOnly = false;
     order.positionSide = 1;
