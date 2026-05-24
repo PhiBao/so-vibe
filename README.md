@@ -1,6 +1,8 @@
-# SoVibe — Agentic Perp Trading Terminal
+# SoVibe — AI-Augmented Perpetual Trading Terminal
 
-> **SoVibe** is a AI-augmented perpetual trading terminal that combines a 6-strategy technical swarm with real-time SoSoValue news sentiment to generate actionable trading signals on SoDEX.
+> **SoVibe** combines a 7-strategy swarm, DGrid AI intelligence, and deep SoSoValue data to generate explained, executable trading signals on SoDEX testnet.
+
+Built for the **SoSoValue Buildathon — May 2026**.
 
 ---
 
@@ -8,31 +10,33 @@
 
 1. [Project Overview](#1-project-overview)
 2. [Target Users](#2-target-users)
-3. [Core Logic & Architecture](#3-core-logic--architecture)
-4. [APIs & Data Sources](#4-apis--data-sources)
-5. [Setup Instructions](#5-setup-instructions)
-6. [Go-to-Market (GTM)](#6-go-to-market-gtm)
-7. [Vision](#7-vision)
-8. [Current Implementation](#8-current-implementation)
-9. [Roadmap: Next Two Waves](#9-roadmap-next-two-waves)
-10. [Project Structure](#10-project-structure)
-11. [Key Technical Decisions](#11-key-technical-decisions)
+3. [Architecture](#3-architecture)
+4. [The 7-Strategy Swarm](#4-the-7-strategy-swarm)
+5. [Vibe Score v2](#5-vibe-score-v2)
+6. [APIs & Data Sources](#6-apis--data-sources)
+7. [Setup Instructions](#7-setup-instructions)
+8. [Go-to-Market (GTM)](#8-go-to-market-gtm)
+9. [Current Implementation](#9-current-implementation)
+10. [Roadmap](#10-roadmap)
+11. [Project Structure](#11-project-structure)
+12. [Key Technical Decisions](#12-key-technical-decisions)
 
 ---
 
 ## 1. Project Overview
 
-**SoVibe** turns raw market data + news sentiment into executable trades. No mock data. No dead buttons. Every signal can be signed and sent on-chain.
+SoVibe turns raw market data + ETF flows + macro context + LLM-analyzed news into executable trades. Every signal includes reasoning. Every signal can be signed on-chain with MetaMask.
 
 ### What It Does
 
-1. **6-Strategy Swarm Analysis** — Runs 5 technical strategies (Trend Following, Mean Reversion, Momentum, S/R Bounce, Volume Breakout) + SoSoValue sentiment on every market cycle.
-2. **Vibe Score** — Blends technical consensus (50%), SoSoValue sentiment (30%), and funding rate bias (20%) into a single confidence metric.
-3. **AutoHedge Sizing** — Scales position size up 1.5x on full consensus and down 0.5x when sentiment conflicts with technicals.
-4. **One-Click Execution** — Builds EIP712-signed transactions for SoDEX and submits via `eth_signTypedData_v4`.
-5. **SL/TP Automation** — Attaches stop-loss and take-profit conditional orders immediately after market orders settle.
-6. **Spot/Perp Transfer** — Deposit and withdraw between spot and perpetual balances natively.
-7. **Backtesting** — Tests the swarm on 1,000 hours of historical candles (real SoDEX data with synthetic fallback).
+1. **7-Strategy Swarm** — 5 technical strategies + DGrid AI sentiment + SoSoValue ETF flow analysis, all voting independently.
+2. **Vibe Score v2** — Blends Tech (30%), LLM Sentiment (20%), ETF Flow (15%), Funding (15%), Macro (10%), Market Context (10%) with configurable weights.
+3. **LLM Reasoning** — DGrid AI (`gpt-4o-mini`) explains every signal in human-readable text with risk factors.
+4. **Strategy Builder** — Toggle strategies ON/OFF and adjust weight sliders. Customize the swarm's personality.
+5. **AutoHedge Sizing** — Scales position up 1.5x on full consensus, down 0.5x when signals conflict.
+6. **One-Click Execution** — EIP712-signed trades on SoDEX via `eth_signTypedData_v4`.
+7. **SL/TP Automation** — Stop-loss and take-profit attached immediately after fill.
+8. **Dual-Source Backtesting** — SoDEX testnet 1h candles + SoSoValue 1d klines cross-reference.
 
 ### Key Features
 
@@ -40,16 +44,18 @@
 |---------|--------|
 | SoDEX testnet market orders (EIP712) | Live |
 | Stop-loss / Take-profit conditional orders | Live |
-| Position close (market order) | Live |
 | Spot/Perp balance transfer | Live |
-| Real-time SoSoValue news sentiment | Live |
-| 6-strategy technical swarm | Live |
-| Vibe Score consensus engine | Live |
+| DGrid AI news sentiment (LLM) | Live |
+| SoSoValue ETF flow analysis | Live |
+| SoSoValue macro event detection | Live |
+| SoSoValue market snapshots + cycle position | Live |
+| 7-strategy swarm with LLM reasoning | Live |
+| Strategy Builder (toggle + weight per strategy) | Live |
+| Vibe Score v2 with normalized dynamic weights | Live |
 | AutoHedge position sizing | Live |
-| Dynamic market dropdown (all SoDEX pairs) | Live |
-| Sidebar market ticker + wallet balances | Live |
-| Backtest engine with synthetic fallback | Live |
-| Toast notification system | Live |
+| Backtest engine (SoDEX + SoSoValue dual source) | Live |
+| News feed with currency/tag/category filters | Live |
+| Cyberpunk terminal UI | Live |
 
 ---
 
@@ -57,184 +63,154 @@
 
 ### Primary: Active DeFi Traders
 - Trade perpetuals regularly on DEXes
-- Want sentiment-aware signals, not just chart patterns
+- Want AI-augmented signals, not just chart patterns
 - Comfortable with self-custody wallets (MetaMask)
-- Frustrated by CEX bias and want DEX-native execution
+- Want to understand *why* a signal was generated
 
-### Secondary: Quant/Sysop Developers
+### Secondary: Strategy Hackers
 - Want a hackable, open-source trading engine
-- Need DEX-agnostic adapter layer for multi-DEX bots
-- Want to backtest strategies before deploying capital
+- Want to toggle strategies and tune weights
+- Want to backtest before deploying capital
+- Want to share strategy configs with others
 
-### Tertiary: Crypto Researchers & Analysts
-- Want to study correlation between news sentiment and price action
-- Need clean, exportable signal data
-- Want to validate swarm consensus vs. individual strategies
+### Tertiary: Copy-Traders (Wave 3)
+- Want to discover profitable on-chain wallets
+- Want one-click trade mirroring with proportional sizing
+- Value transparency and provable track records
 
 ---
 
-## 3. Core Logic & Architecture
+## 3. Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│           Next.js 16 (App Router)       │
-│  ┌─────────┐ ┌─────────┐ ┌──────────┐   │
-│  │Dashboard│ │ Trade   │ │  Bots    │   │
-│  └─────────┘ └─────────┘ └──────────┘   │
-│  ┌─────────┐ ┌─────────┐ ┌──────────┐   │
-│  │Positions│ │Backtest │ │  News    │   │
-│  └─────────┘ └─────────┘ └──────────┘   │
-├─────────────────────────────────────────┤
-│           API Routes (Next.js)          │
-│  /api/trade  /api/bot/*  /api/market/*  │
-│  /api/positions/*  /api/backtest        │
-│  /api/wallet/* (balance, deposit, wd)   │
-├─────────────────────────────────────────┤
-│         DEX Adapter Layer               │
-│      lib/dex/sodex-adapter.ts           │
-│  • EIP712 signing  • Order builders     │
-│  • Transfer builders • Format helpers   │
-├─────────────────────────────────────────┤
-│         Trading Engine (JS)             │
-│  signals.js  backtest.js  indicators.js │
-│  sentiment-engine.ts  signal-store.ts   │
-├─────────────────────────────────────────┤
-│         SoDEX Testnet API               │
-│ testnet-gw.sodex.dev/api/v1/(spot|perps)│
-└─────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────┐
+│              Next.js 16 (App Router)                 │
+│  ┌─────────┐ ┌────────┐ ┌────────┐ ┌──────────┐      │
+│  │Dashboard│ │ Trade  │ │ Bots   │ │ Backtest │      │
+│  └─────────┘ └────────┘ └────────┘ └──────────┘      │
+│  ┌────────┐ ┌────────┐ ┌────────┐                    │
+│  │Positions│ │ News   │ │Strategy│                   │
+│  └────────┘ └────────┘ └────────┘                    │
+├──────────────────────────────────────────────────────┤
+│                API Routes (Next.js)                  │
+│  /api/bot/*  /api/trade  /api/market/*  /api/news    │
+│  /api/positions/*  /api/wallet/*  /api/backtest      │
+├──────────────────────────────────────────────────────┤
+│              DEX Adapter Layer                       │
+│           lib/dex/sodex-adapter.ts                   │
+│    EIP712 signing · Order builders · Transfers       │
+├──────────────────────────────────────────────────────┤
+│              Intelligence Engine                     │
+│  signals.js  backtest.js  llm-agent.ts  indicators   │
+│  funding.js  market.js   etf-flow.js                 │
+├──────────────┬───────────────────────────────────────┤
+│  SoSoValue   │  DGrid AI            SoDEX Testnet    │
+│  (9 modules) │  (200+ LLMs)         (chain 138565)   │
+└──────────────┴───────────────────────────────────────┘
 ```
 
-### The 6-Strategy Swarm
+---
 
-Every market cycle, the engine runs **six independent strategies** on the latest 1h candle data. Each strategy outputs a signal in the range `[-1.0, 1.0]`, a confidence score `[0, 1]`, and optional stop-loss / take-profit levels. The strategies vote independently; no single strategy can force a trade.
+## 4. The 7-Strategy Swarm
 
-| # | Strategy | Philosophy | Primary Indicators |
-|---|----------|-----------|-------------------|
-| 1 | **Trend Following** | *The trend is your friend* | EMA 9/21/50 cross, RSI filter, ATR-based SL |
-| 2 | **Mean Reversion** | *Prices return to the mean* | Bollinger Bands, RSI extremes, volume confirmation |
-| 3 | **Momentum** | *Follow the acceleration* | MACD histogram cross, volume surge, RSI continuation |
-| 4 | **S/R Bounce** | *Key levels hold until they break* | Local support / resistance detection, distance + RSI filter |
-| 5 | **Volume Breakout** | *Volume precedes price* | Volume spike >2x average, price change >0.5%, EMA alignment |
-| 6 | **SoSoValue Sentiment** | *News moves markets* | SoSoValue news sentiment score & article volume |
+Every 60s cycle, the engine runs 7 independent strategies. Each votes independently. No single strategy can force a trade.
 
-#### 1. Trend Following (`trend_following`)
-- **Logic**: Requires full EMA stack alignment (`EMA9 > EMA21 > EMA50` for long; inverse for short). A fresh EMA9/21 cross boosts the signal to max strength (`±1.0`). RSI must not be in overbought/oversold territory (<65 for long, >35 for short) to avoid chasing exhausted moves.
-- **Stop Loss**: `1.5 × ATR` below entry (long) or above (short).
-- **Signal Range**: `0.0 → 0.7` (aligned trend) or `1.0` (fresh cross).
+| # | Strategy | Source | Signal | Best In |
+|---|----------|--------|--------|---------|
+| 1 | **Trend Following** | EMA 9/21/50 cross + RSI filter + ATR | Directional | Trending markets |
+| 2 | **Mean Reversion** | Bollinger Bands + RSI extremes + volume | Contrarian | Range-bound |
+| 3 | **Momentum** | MACD histogram cross + volume surge | Directional | Breakouts |
+| 4 | **S/R Bounce** | Support/Resistance detection + RSI | Contrarian | Reversals |
+| 5 | **Volume Breakout** | Volume spike >2x avg + EMA alignment | Directional | High volatility |
+| 6 | **DGrid AI Sentiment** | LLM analyzes SoSoValue news → score + narratives | Macro | News-driven |
+| 7 | **ETF Flow** | SoSoValue ETF net inflow/outflow + trend | Macro | Institutional flow |
 
-#### 2. Mean Reversion (`mean_reversion`)
-- **Logic**: Looks for price outside Bollinger Bands (`±2σ`) combined with RSI extremes (`<30` or `>70`). If volume spikes (>1.5× average) simultaneously, the signal strengthens to `±1.0`. Also detects middle-band bounces when price hugs the SMA20 with neutral RSI.
-- **Stop Loss**: Just beyond the breached band (`lower − 1×ATR` for long, `upper + 1×ATR` for short).
-- **Signal Range**: `0.0 → 0.8` (band breach) or `1.0` (volume confirmation).
+### DGrid AI Sentiment (Strategy 6)
+- Replaced the old keyword-matching sentiment engine ("surge" = bullish, "crash" = bearish)
+- Sends currency-matched SoSoValue news headlines to `gpt-4o-mini` via DGrid Gateway
+- Returns: `{ score: -1..1, confidence: 0..1, reasoning, keyNarratives[] }`
+- Falls back to keyword matching if `DGRID_API_KEY` not configured
 
-#### 3. Momentum (`momentum`)
-- **Logic**: MACD histogram cross is the trigger. Bullish when histogram flips positive with RSI < 65; bearish when histogram flips negative with RSI > 35. Volume >1.3× average amplifies confidence. Continuation mode activates when histogram extends in-trend with RSI in the 30-70 sweet spot.
-- **Stop Loss**: `2 × ATR` — wider than trend-following because momentum trades are noisier.
-- **Signal Range**: `0.0 → 0.9` (cross + volume) or `0.6` (cross alone).
+### ETF Flow (Strategy 7)
+- Pulls real-time ETF net inflow/outflow from SoSoValue (`/etfs/summary-history`)
+- Supports BTC, ETH, SOL, and 7 other assets
+- Signal amplifies with consecutive flow days: 3+ days → 1.15x, 5+ days → 1.3x
+- Net inflows → bullish (institutions buying); net outflows → bearish (redemptions)
 
-#### 4. Support / Resistance Bounce (`sr_bounce`)
-- **Logic**: Scans recent candles for local minima (supports) and maxima (resistances). If price sits within 1% of a support level and RSI < 40, it generates a long signal weighted by the level's historical strength. Inverse for resistance rejection. Automatically sets take-profit at the opposing level.
-- **Stop Loss**: The support/resistance level itself (or 3% fallback if level is lost).
-- **Signal Range**: `0.0 → 0.7` scaled by `level_strength × 0.1`.
+### Strategy Builder
+Located at `/bots`:
+- **ON/OFF toggle** per strategy — disabled strategies are skipped entirely
+- **Weight slider** 0-100% per strategy — normalized to always sum to 1.0
+- **Config card export** — copy JSON to share your strategy setup
 
-#### 5. Volume Breakout (`volume_breakout`)
-- **Logic**: Detects when volume exceeds 2× the 20-candle average and price moves >0.5% in the same candle. Direction is confirmed by EMA alignment (bullish if `EMA9 > EMA21`). Also detects volume divergence (price up, volume down → fade the move).
-- **Stop Loss**: `1.5 × ATR`.
-- **Signal Range**: `0.0 → 1.0` proportional to `volRatio × 0.3`.
+---
 
-#### 6. SoSoValue Sentiment (`sosovalue_sentiment`)
-- **Logic**: Treats external news sentiment as a **peer voter** with equal weight, not a post-processing layer. The SoSoValue news API returns a `score` (-1 to 1) and `confidence` (0 to 1). If confidence < 0.2 or no articles exist, the strategy abstains (signal = 0). Otherwise it votes `score × min(1, confidence × 1.5)`.
-- **No SL/TP**: Sentiment is a directional bias, not a technical level.
-- **Signal Range**: `0.0 → ±1.0`.
+## 5. Vibe Score v2
 
-### Swarm Synthesis (`synthesizeSignals`)
+The Vibe Score blends 6 weighted components. All weights are dynamically normalized from Strategy Builder config — they always sum to 1.0 regardless of user settings.
 
-The swarm synthesizer collects all non-zero votes and computes a **weighted average** where each strategy's vote is weighted by its confidence:
+| Component | Default Weight | Source |
+|-----------|---------------|--------|
+| Technical Consensus | 30% | Weighted average of 5 technical strategies |
+| DGrid AI Sentiment | 20% | LLM-scored news sentiment |
+| ETF Flow | 15% | SoSoValue ETF net inflow/outflow |
+| Funding Rate Bias | 15% | Positive funding → short bias |
+| Macro Context | 10% | FOMC/CPI/NFP proximity detection |
+| Market Structure | 10% | Cycle position, ATH distance |
 
-```
-finalSignal = Σ(signal_i × confidence_i) / Σ(confidence_i)
-```
-
-**Consensus rules:**
-- **Agreement bonus**: If ≥3 strategies agree on direction, confidence gets a `+0.15` bonus.
-- **Consensus filter**: The trade only fires if ≥2 strategies support the final direction, OR the weighted signal is very strong (`|signal| ≥ 0.6`), OR only 1 strategy is active (no opposition).
-- **Action thresholds**: `finalSignal ≥ +0.25` → **LONG**; `finalSignal ≤ −0.25` → **SHORT**; otherwise **HOLD**.
-
-### Vibe Score
-
-The Vibe Score blends three macro inputs into a single sentiment metric used for position sizing and hedging:
-
-| Component | Weight | Source |
-|-----------|--------|--------|
-| Technical consensus | 50% | Average of all 6 strategy signals |
-| SoSoValue sentiment | 30% | News sentiment score |
-| Funding rate bias | 20% | Positive funding = short bias (overleveraged longs), negative = long bias |
-
-- `+1.0` = extreme bullish consensus across all three pillars.
-- `−1.0` = extreme bearish consensus.
-- `0` = neutral or conflicting.
-
-**Full consensus**: When all three pillars agree on direction (`tech > 0.2`, `sentiment > 0.1`, `funding > 0` for long; inverse for short), the `fullConsensus` flag is set.
+**Full consensus** triggers when tech, sentiment, ETF, and funding all agree. This activates the 1.5x AutoHedge size multiplier.
 
 ### AutoHedge Position Sizer
 
-Position size is adjusted based on how well the **Vibe Score aligns** with the **dominant technical signal**:
-
-| Condition | Size Multiplier | Behavior |
-|-----------|-----------------|----------|
-| Full consensus (all 3 agree) | **1.5×** | Max conviction — size up |
-| Strong alignment (vibe × tech > 0.3) | **1.25×** | High confidence — moderate boost |
-| Neutral / mild alignment | **1.0×** | Base size |
-| Mild conflict (alignment < 0) | **0.75×** | Reduce exposure |
-| Strong conflict (alignment < −0.2) | **0.5×** | Hedge mode — half size |
-
-Confidence is also folded in: `sizeMultiplier *= (0.5 + confidence × 0.5)`, so low-confidence signals always trade smaller.
-
-### Design System
-- **Cyberpunk terminal** aesthetic — CRT scanlines, mono fonts, neon accents
-- **Colors**: Cyan (`#00f0ff`), Green (`#00ff41`), Red (`#ff0040`)
-- **Font**: JetBrains Mono
-- All text is uppercase mono with bracket-style buttons `[ LABEL ]`
+| Condition | Multiplier | Behavior |
+|-----------|-----------|----------|
+| Full consensus | **1.5x** | Max conviction |
+| Strong alignment | **1.25x** | Moderate boost |
+| Neutral | **1.0x** | Base size |
+| Mild conflict | **0.75x** | Reduce |
+| Strong conflict | **0.50x** | Hedge mode |
 
 ---
 
-## 4. APIs & Data Sources
+## 6. APIs & Data Sources
 
 ### SoDEX (Primary DEX)
-- **Endpoint**: `https://testnet-gw.sodex.dev`
-- **Routes Used**:
-  - `GET /api/v1/perps/markets/symbols` — all trading pairs
-  - `GET /api/v1/perps/markets/{symbol}/klines` — candle data
-  - `GET /api/v1/perps/markets/{symbol}/orderbook` — L2 book
-  - `GET /api/v1/perps/accounts/{address}/state` — balances + positions
-  - `POST /api/v1/perps/exchange` — order submission (EIP712 signed)
-  - `POST /api/v1/spot/exchange` — spot/perp transfers (EIP712 signed)
-- **Auth**: EIP712 typed data signatures with `0x01` (perps) / `0x02` (spot) prefix
+- **Testnet**: `https://testnet-gw.sodex.dev`
+- **Auth**: EIP712 typed data signatures
+- **Routes**: Markets, candles, orderbook, order submission, account state, spot/perp transfers
+- **Chain ID**: 138565
 
-### SoSoValue (Sentiment & News)
+### SoSoValue (Data Layer)
 - **Endpoint**: `https://openapi.sosovalue.com/openapi/v1`
-- **Routes Used**:
-  - `GET /news/hot` — hot crypto news feed
 - **Auth**: `x-soso-api-key` header
-- **Integration**: News articles are scored for sentiment per symbol proximity and headline tone, then fed as the 6th vote in the swarm
+- **Modules Used** (9 of 9):
 
-### Internal APIs
-- `/api/bot/cycle` — runs one analysis cycle, returns signals
-- `/api/bot/execute` — builds market order via adapter
-- `/api/positions/sl-tp` — builds conditional orders
-- `/api/backtest` — runs historical simulation
-- `/api/wallet/balance` — fetches spot + perp balances
-- `/api/wallet/deposit` — builds spot→perp transfer
-- `/api/wallet/withdraw` — builds perp→spot transfer
+| Module | Key Endpoints | Usage |
+|--------|--------------|-------|
+| Feeds/News | `/news`, `/news/hot`, `/news/search` | Sentiment input + news page |
+| ETF | `/etfs/summary-history` | ETF flow strategy |
+| Currency | `/currencies/{id}/market-snapshot` | Cycle position, ATH distance |
+| Macro | `/macro/events` | FOMC/CPI/NFP detection |
+| Indices | `/indices` | Market breadth context |
+| Crypto Stocks | `/crypto-stocks` | Cross-market correlation |
+| Fundraising | `/fundraising/projects` | Ecosystem health |
+| Analysis Charts | `/analyses` | SoSoValue chart data |
+
+### DGrid AI (Intelligence Layer)
+- **Endpoint**: `https://api.dgrid.ai/v1`
+- **Auth**: `DGRID_API_KEY` header (OpenAI-compatible)
+- **Model**: `openai/gpt-4o-mini`
+- **Functions**: News sentiment analysis, market regime classification, signal reasoning
+- **Cost**: ~$0.001 per bot cycle
 
 ---
 
-## 5. Setup Instructions
+## 7. Setup Instructions
 
 ### Prerequisites
 - Node.js 20+
-- npm or pnpm
 - MetaMask browser extension
+- SoDEX testnet configured in MetaMask (chain 138565)
 
 ### Install
 ```bash
@@ -243,11 +219,12 @@ npm install
 ```
 
 ### Environment
-Create `.env.local`:
+Create `web/.env`:
 ```bash
 DEX_PROVIDER=sodex
 DEX_TESTNET=true
 SOSO_API_KEY=your-sosovalue-api-key
+DGRID_API_KEY=your-dgrid-api-key
 NEXT_PUBLIC_RPC_URL=https://testnet-v2.valuechain.xyz/
 ```
 
@@ -256,129 +233,68 @@ NEXT_PUBLIC_RPC_URL=https://testnet-v2.valuechain.xyz/
 npm run dev
 ```
 
-Open `http://localhost:3000`, fund your SoDEX account with testnet USDC via the faucet link.
-
-### Build
-```bash
-npm run build
-```
+Open `http://localhost:3000`. Connect MetaMask. Fund with testnet USDC. Start the bot.
 
 ---
 
-## 6. Go-to-Market (GTM)
+## 8. Go-to-Market (GTM)
 
-### Early Adopters
-- **Limited beta** — invite 50 active DeFi traders via Twitter DM
-- **Feedback loop** — collect UX feedback, fix edge cases
-- **Content** — write threads on "How I built an AI trading bot in 48 hours"
+### Phase 1: Hackathon Launch (Current)
+- Public demo at SoSoValue Buildathon
+- Strategy Builder as the differentiator — configurable, not black-box
+- Content: "How we built an AI trading terminal on SoDEX"
 
-### Growth
-- **Public launch** — remove beta invite requirement
-- **Referral program** — traders earn fee rebates for referrals
-- **Integrations** — add support for additional DEXes (GMX, dYdX)
-- **Analytics dashboard** — public leaderboards of bot performance
+### Phase 2: Copy-Trading (Wave 3)
+- **Discovery**: On-chain SoDEX wallet leaderboard
+- **Mirroring**: One-click copy with proportional position sizing
+- **Viral loop**: Every copied wallet is a growth channel. "Copy my trades on SoVibe."
+- **Referral**: Fee rebates for copier referrals
 
 ### Monetization
-- **Free tier**: 5 signals/day, basic strategies
-- **Pro tier** ($29/mo): unlimited signals, custom strategies, API access
-- **Institutional**: white-label deployment, custom risk parameters
+- **Free**: 5 signals/day, basic strategies
+- **Pro** ($29/mo): Unlimited signals, custom strategy weights, API access
+- **Institutional**: White-label, custom risk parameters
 
 ---
 
-## 7. Vision
+## 9. Current Implementation
 
-> **SoVibe will become the default intelligence layer for DEX-native perpetual trading.**
+### What's Live (Wave 2)
 
-We believe that in 3 years, most active traders will not manually analyze charts. They will delegate to AI swarms that combine on-chain data, news sentiment, social signals, and macro trends into executable strategies.
-
-SoVibe is the first step: a fully open-source, DEX-agnostic terminal where the user always keeps custody, always sees why a signal was generated, and can always override the AI.
-
-**The end state:**
-- Any trader can spin up a custom swarm in <5 minutes
-- Any developer can add a new strategy or DEX adapter
-- Any researcher can export signal data for analysis
-- The terminal runs on any EVM chain with a perp DEX
-
----
-
-## 8. Current Implementation
-
-### What's Live
-
-| Module | Status | Notes |
-|--------|--------|-------|
-| SoDEX Adapter | Complete | Full EIP712 signing, all order types, spot/perp transfers |
-| 6-Strategy Swarm | Complete | 5 technical + SoSoValue sentiment |
-| Vibe Score | Complete | Weighted consensus with AutoHedge sizing |
-| Trade Execution | Complete | Market orders + SL/TP + position close |
-| Deposit/Withdraw | Complete | Spot↔perp transfers via EIP712 |
-| Backtest Engine | Complete | 1,000 candle simulation with fees |
-| News Feed | Complete | SoSoValue hot news with sentiment badges |
-| UI/UX | Complete | Cyberpunk terminal design system |
-
-### What's Stubbed / Limited
-
-| Module | Status | Limitation |
-|--------|--------|------------|
-| Limit Orders | UI ready | Backend builder exists, no UI route |
-| On-chain PnL | Partial | Reads from SoDEX state, no historical tracking |
-| Multi-timeframe | Not started | Only 1h candles currently |
-| Portfolio Analytics | Not started | No Sharpe/drawdown tracking for live trades |
+| Module | Status |
+|--------|--------|
+| SoDEX Adapter (EIP712, all order types) | Complete |
+| 7-Strategy Swarm (5 tech + LLM + ETF) | Complete |
+| DGrid AI Integration (sentiment + reasoning) | Complete |
+| SoSoValue ETF Flow Strategy | Complete |
+| SoSoValue Macro Event Detection | Complete |
+| SoSoValue Market Snapshots | Complete |
+| Strategy Builder (toggle + weight) | Complete |
+| Vibe Score v2 (normalized dynamic weights) | Complete |
+| AutoHedge Position Sizing | Complete |
+| Trade Execution + SL/TP | Complete |
+| Dual-Source Backtest (SoDEX + SoSoValue) | Complete |
+| News Feed (currency/category/tag filtered) | Complete |
+| Cyberpunk Terminal UI | Complete |
 
 ---
 
-## 9. Roadmap: Next Two Waves
+## 10. Roadmap
 
-### Wave 2: LLM Intelligence Layer
-
-We plan to integrate **GenLayer** (intelligence for crypto) to analyze in the swarm signal.
-
-**What GenLayer adds:**
-- **AI agent consensus** — Multiple LLM agents debate price direction and reach consensus
-- **Explainability** — Every prediction includes reasoning trace ("why bullish?")
-
-**Technical Architecture:**
-
-```
-┌─────────────────────────────────────────┐
-│         GenLayer / Predictify           │
-│  ┌─────────┐ ┌─────────┐ ┌──────────┐   │
-│  │Oracle A │ │Oracle B │ │Oracle C  │   │
-│  │GPT-4o   │ │Claude   │ │Local LLM │   │
-│  └─────────┘ └─────────┘ └──────────┘   │
-│              ↓ Consensus                │
-│         "Bullish ETH, 78% conf"         │
-└─────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────┐
-│           SoVibe Swarm Engine           │
-│  Technical: 35% | Sentiment: 20%        │
-│  Funding: 10% | LLM: 35%                │
-│              ↓                          │
-│         Vibe Score + Explanation        │
-└─────────────────────────────────────────┘
-```
-
-**Value Proposition:**
-- Traders get **human-readable reasoning** for every signal
-- The swarm becomes **self-improving** — LLM learns which strategies work in which regimes
-
-### Wave 3: Advanced Strategies
+### Wave 3: Copy-Trading Terminal (Next)
 
 | Feature | Description |
 |---------|-------------|
-| Limit Order UI | Add limit order tab to trade page |
-| Order History | Track all fills and cancellations per account |
-| Realized PnL | Calculate realized PnL from closed positions |
-| Multi-timeframe | Support 15m, 4h, 1d analysis |
-| Custom Strategy Builder | UI to add/remove strategies from swarm |
-| Strategy Backtesting | Backtest individual strategies, not just swarm |
-| Portfolio Rebalancing | Auto-adjust position sizes across multiple markets |
-| Social Signals | Add Twitter/X sentiment as 7th strategy vote |
+| Wallet Discovery | Scan SoDEX on-chain for profitable wallets |
+| Trade Mirroring | One-click proportional position copying |
+| Wallet Profiles | Public PnL, win rate, strategy type |
+| Strategy Cards | Shareable bot config via URL/JSON |
+| Referral Program | Fee rebates for copier referrals |
+| Leaderboard | Top wallets by Sharpe, consistency |
 
 ---
 
-## 10. Project Structure
+## 11. Project Structure
 
 ```
 web/
@@ -387,58 +303,68 @@ web/
 │   │   ├── bot/              # Bot cycle, execute, signals, status, toggle
 │   │   ├── market/           # Market data (price, orderbook)
 │   │   ├── markets/          # All market limits
-│   │   ├── news/             # SoSoValue news feed
+│   │   ├── news/             # Enriched SoSoValue news (symbol, category, tags)
 │   │   ├── positions/        # Close position, SL/TP builder
 │   │   ├── status/           # System status
 │   │   ├── trade/            # Manual trade order builder
-│   │   └── wallet/           # Balance, deposit, withdraw
+│   │   ├── wallet/           # Balance, deposit, withdraw
+│   │   └── backtest/         # Backtest (SoDEX + SoSoValue dual source)
 │   ├── backtest/             # Backtest UI
-│   ├── bots/                 # Bot control + signal execution
-│   ├── news/                 # News feed page
+│   ├── bots/                 # Bot control + strategy builder + execution
+│   ├── news/                 # News feed with symbol filter, AI badges
 │   ├── positions/            # Position monitor
 │   ├── trade/                # Manual trade execution
 │   ├── globals.css           # Cyberpunk design system
 │   ├── layout.tsx            # Terminal layout wrapper
-│   ├── page.tsx              # Dashboard
+│   ├── page.tsx              # Dashboard with intelligence overlay
 │   └── providers.tsx         # Wallet context
 ├── components/
-│   ├── TerminalLayout.tsx    # Sidebar + nav + wallet
+│   ├── TerminalLayout.tsx    # Sidebar + nav + wallet panel
 │   ├── ToastProvider.tsx     # Toast notification system
 │   └── WalletProvider.tsx    # Wagmi provider
 ├── lib/
 │   ├── dex/
 │   │   ├── types.ts          # Generic DEX interface
 │   │   ├── index.ts          # Factory + config
-│   │   └── sodex-adapter.ts  # SoDEX native adapter
+│   │   └── sodex-adapter.ts  # SoDEX native adapter (EIP712, orders, transfers)
 │   ├── engine/
-│   │   ├── signals.js        # 6-strategy swarm + Vibe Score
+│   │   ├── signals.js        # 7-strategy swarm + Vibe Score v2 + AutoHedge
 │   │   ├── backtest.js       # Backtest engine
-│   │   ├── indicators.js     # Technical indicators
-│   │   ├── funding.js        # Funding rate analysis
-│   │   └── market.js         # Market data wrapper
-│   ├── sosovalue.ts          # SoSoValue API client
-│   ├── sentiment-engine.ts   # News sentiment scoring
+│   │   ├── indicators.js     # Technical indicators (RSI, MACD, BB, EMA, ATR)
+│   │   ├── funding.js        # Funding rate + liquidation analysis
+│   │   ├── market.js         # Market data wrapper
+│   │   ├── llm-agent.ts      # DGrid AI client (sentiment, regime, reasoning)
+│   │   └── strategies/
+│   │       └── etf-flow.js   # ETF flow strategy module
+│   ├── sosovalue/
+│   │   ├── etf.ts            # SoSoValue ETF data + signal analysis
+│   │   ├── market.ts         # Market snapshot + cycle position
+│   │   └── macro.ts          # Macro events (FOMC, CPI, NFP detection)
+│   ├── sosovalue.ts          # SoSoValue API client (30+ endpoints, 9 modules)
+│   ├── sentiment-engine.ts   # LLM-powered news sentiment (DGrid) + fallback
 │   ├── signal-store.ts       # Server-side signal persistence
-│   ├── use-sodex-tx.ts       # EIP712 signing hook
+│   ├── use-sodex-tx.ts       # EIP712 signing hook (perps + spot domains)
 │   ├── security.ts           # Security auditor
 │   └── data-store.ts         # State storage
 ```
 
 ---
 
-## 11. Key Technical Decisions
+## 12. Key Technical Decisions
 
-1. **EIP712 over API keys** — SoDEX uses EIP712 typed data for auth. We sign with `eth_signTypedData_v4` and prefix signatures (`0x01` for perps, `0x02` for spot).
+1. **EIP712 over API keys** — SoDEX uses EIP712 typed data for auth. Signatures via `eth_signTypedData_v4`. Prefixes: `0x01` (perps), `0x02` (spot).
 
-2. **Field-order sensitive hashing** — The Go server re-marshals the request body. Field order must match the Go struct exactly or hash verification fails.
+2. **DGrid AI via OpenAI SDK** — OpenAI-compatible means zero integration friction. Model switched by changing a config string. All LLM functions have fallback paths.
 
-3. **Trailing zero stripping** — `formatQuantity()` strips trailing zeros (`80.070` → `80.07`) because the server rejects them.
+3. **SoSoValue as data backbone** — 9 API modules drive everything: ETF flows for institutional signal, macro events for timing, market snapshots for cycle context.
 
-4. **Synthetic candle fallback** — Testnet klines are sparse. When real data is unavailable, we generate realistic synthetic candles for backtesting.
+4. **Normalized dynamic weights** — Strategy Builder weights always normalize to 1.0 regardless of user input. Can't crash, can't overflow.
 
-5. **Client-side bot state** — Bot logs and config live in `localStorage`, not the server. This keeps the server stateless and Vercel-compatible.
+5. **Field-order sensitive hashing** — SoDEX Go server re-marshals JSON. Field order must match struct exactly.
 
-6. **Spot domain separation** — Spot transfers use a separate EIP712 domain (`name: "spot"`) from perps (`name: "futures"`).
+6. **Client-side bot state** — Config and logs in `localStorage`. Server is stateless and Vercel-compatible.
+
+7. **Spot domain separation** — Spot transfers use separate EIP712 domain (`name: "spot"`) from perps (`name: "futures"`).
 
 ---
 
