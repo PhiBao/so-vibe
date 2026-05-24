@@ -203,8 +203,8 @@ export default function Dashboard() {
       {/* News Link */}
       <div className="terminal-card p-4 flex items-center justify-between">
         <div>
-          <div className="text-[11px] font-bold tracking-wider text-[var(--cyan)]">SOSOVALUE_NEWS</div>
-          <div className="text-[10px] text-[var(--text-secondary)] font-mono mt-0.5">Real-time crypto sentiment from sosovalue.com</div>
+          <div className="text-[11px] font-bold tracking-wider text-[var(--cyan)]">SOSOVALUE_NEWS_AI</div>
+          <div className="text-[10px] text-[var(--text-secondary)] font-mono mt-0.5">DGrid AI + SoSoValue — LLM-powered sentiment & ETF flow analysis</div>
         </div>
         <a href="/news" className="btn-terminal text-[10px] py-1.5 px-3">[ OPEN FEED ]</a>
       </div>
@@ -218,38 +218,52 @@ export default function Dashboard() {
           </div>
           <div className="p-4 space-y-3">
             {botSignalList.map((sig: any, i: number) => {
-              const stratDetails = (sig.details || []).filter((d: any) => d.name !== "sosovalue_sentiment");
+              const stratDetails = (sig.details || []).filter((d: any) => d.name !== "sosovalue_sentiment" && d.name !== "etf_flow");
               const sentimentDetail = (sig.details || []).find((d: any) => d.name === "sosovalue_sentiment");
+              const etfDetail = (sig.details || []).find((d: any) => d.name === "etf_flow");
               return (
-                <div key={i} className="p-3 bg-white/[0.02] border border-[var(--border)] space-y-2">
+                <div key={i} className="p-4 bg-white/[0.02] border border-[var(--border)] space-y-3">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 border ${sig.side === "long" ? "border-[var(--green)] text-[var(--green)]" : "border-[var(--red)] text-[var(--red)]"}`}>{(sig.side || "?").toUpperCase()}</span>
-                      <span className="text-[13px] font-mono font-bold text-[var(--cyan)]">{sig.symbol}</span>
-                      <span className="text-[10px] text-[var(--text-secondary)] font-mono">@{sig.entryPrice?.toFixed(2)}</span>
-                      {sentimentDetail && (
-                        <span className={`text-[9px] px-1.5 py-0.5 border ${sentimentDetail.signal === "bullish" ? "border-[var(--green)]/30 text-[var(--green)]" : sentimentDetail.signal === "bearish" ? "border-[var(--red)]/30 text-[var(--red)]" : "border-[var(--text-dim)] text-[var(--text-secondary)]"}`}>
-                          SoSoValue: {sentimentDetail.signal}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={`text-[12px] font-bold px-3 py-1 border ${sig.side === "long" ? "border-[var(--green)] text-[var(--green)]" : "border-[var(--red)] text-[var(--red)]"}`}>{(sig.side || "?").toUpperCase()}</span>
+                      <span className="text-[15px] font-mono font-bold text-[var(--cyan)]">{sig.symbol}</span>
+                      <span className="text-[12px] text-[var(--text-secondary)] font-mono">@{sig.entryPrice?.toFixed(2)}</span>
+                      {etfDetail && (
+                        <span className={`text-[11px] px-2 py-0.5 border font-mono ${etfDetail.signal === "bullish" ? "border-[var(--green)]/30 text-[var(--green)]" : "border-[var(--red)]/30 text-[var(--red)]"}`}>
+                          🏦 ETF: {etfDetail.meta?.trend7d || etfDetail.signal}
+                        </span>
+                      )}
+                      {sentimentDetail?.meta?.narratives?.[0] && (
+                        <span className="text-[11px] px-2 py-0.5 border border-[var(--magenta)]/30 text-[var(--magenta)] font-mono">
+                          🧠 {sentimentDetail.meta.narratives[0]}
+                        </span>
+                      )}
+                      {sig.macroAlert && (
+                        <span className="text-[11px] px-2 py-0.5 border border-[var(--yellow)]/30 text-[var(--yellow)] font-mono">
+                          ⚠ {sig.macroAlert}
                         </span>
                       )}
                     </div>
-                    <a href="/bots" className="btn-terminal text-[10px] py-1 px-2">EXECUTE</a>
+                    <a href="/bots" className="btn-terminal text-[11px] py-1.5 px-3 font-bold">EXECUTE</a>
                   </div>
+                  {sig.reasoning && (
+                    <div className="text-[12px] text-[var(--magenta)] font-mono leading-relaxed opacity-90">💭 {sig.reasoning}</div>
+                  )}
                   {stratDetails.length > 0 && (
-                    <div className="flex gap-1.5 flex-wrap">
+                    <div className="flex gap-2 flex-wrap">
                       {stratDetails.map((d: any, j: number) => (
-                        <span key={j} className="text-[9px] font-mono px-1.5 py-0.5 bg-black/30 border border-[var(--border)] text-[var(--text-secondary)]">
+                        <span key={j} className="text-[10px] font-mono px-2 py-1 bg-black/30 border border-[var(--border)] text-[var(--text)]">
                           {d.name}: <span className={parseFloat(d.signal) > 0 ? "text-[var(--green)]" : parseFloat(d.signal) < 0 ? "text-[var(--red)]" : "text-[var(--text-secondary)]"}>{parseFloat(d.signal) > 0 ? "▲" : parseFloat(d.signal) < 0 ? "▼" : "◆"}</span> {(parseFloat(d.confidence) * 100).toFixed(0)}%
                         </span>
                       ))}
                     </div>
                   )}
-                  <div className="flex items-center gap-3 text-[10px] font-mono text-[var(--text-secondary)]">
-                    <span className="text-[var(--cyan)]">{(sig.confidence * 100).toFixed(0)}% confidence</span>
-                    <span className="text-[var(--text-secondary)]">|</span>
-                    <span className="text-[var(--red)]">SL: {sig.stopLoss?.toFixed(2)}</span>
-                    <span className="text-[var(--text-secondary)]">|</span>
-                    <span className="text-[var(--green)]">TP: {sig.takeProfit?.toFixed(2)}</span>
+                  <div className="flex items-center gap-3 text-[12px] font-mono text-[var(--text-secondary)]">
+                    <span className="text-[var(--cyan)] font-bold">{(sig.confidence * 100).toFixed(0)}% confidence</span>
+                    <span className="text-[var(--text-dim)]">|</span>
+                    <span className="text-[var(--red)] font-bold">SL: {sig.stopLoss?.toFixed(2)}</span>
+                    <span className="text-[var(--text-dim)]">|</span>
+                    <span className="text-[var(--green)] font-bold">TP: {sig.takeProfit?.toFixed(2)}</span>
                   </div>
                 </div>
               );

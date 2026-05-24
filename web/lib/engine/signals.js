@@ -4,7 +4,7 @@
 import { RSI, MACD, BollingerBands, EMA, ATR, SupportResistance, SMA } from "./indicators.js";
 
 // ─── Base Signal Engine Contract ────────────────────────────
-// Every strategy must implement: generate(candles) → { signal: -1..1, confidence: 0..1, meta: {} }
+// Every strategy must implement: generate(data) → { signal: -1..1, confidence: 0..1, meta: {} }
 
 // ─── 1. Trend Following (EMA Cross + ADX) ──────────────────
 export function TrendFollowing(candles) {
@@ -54,16 +54,13 @@ export function MeanReversion(candles) {
   let signal = 0;
   let confidence = 0;
 
-  // Oversold + below lower band → long
   if (closes[last] < bb.lower[last] && rsi[last] < 30) {
     signal = 0.8;
     confidence = 0.75;
-    // Stronger if volume confirms
     const vol = candles[last].volume;
     const avgVol = SMA(candles.map(c => c.volume), 20);
     if (vol > avgVol[last] * 1.5) { signal = 1.0; confidence = 0.85; }
   }
-  // Overbought + above upper band → short
   else if (closes[last] > bb.upper[last] && rsi[last] > 70) {
     signal = -0.8;
     confidence = 0.75;
@@ -71,7 +68,6 @@ export function MeanReversion(candles) {
     const avgVol = SMA(candles.map(c => c.volume), 20);
     if (vol > avgVol[last] * 1.5) { signal = -1.0; confidence = 0.85; }
   }
-  // Middle band bounce
   else if (Math.abs(closes[last] - bb.middle[last]) / bb.middle[last] < 0.005) {
     if (rsi[last] < 45) { signal = 0.4; confidence = 0.5; }
     else if (rsi[last] > 55) { signal = -0.4; confidence = 0.5; }
@@ -104,17 +100,14 @@ export function Momentum(candles) {
   const macdCrossDown = macd.histogram[prev] > 0 && macd.histogram[last] < 0;
   const highVolume = volumes[last] > avgVol[last] * 1.3;
 
-  // Bullish momentum: MACD cross up + volume + RSI not overbought
   if (macdCrossUp && rsi[last] < 65) {
     signal = highVolume ? 0.9 : 0.6;
     confidence = highVolume ? 0.8 : 0.6;
   }
-  // Bearish momentum: MACD cross down + volume + RSI not oversold
   else if (macdCrossDown && rsi[last] > 35) {
     signal = highVolume ? -0.9 : -0.6;
     confidence = highVolume ? 0.8 : 0.6;
   }
-  // Continuation: strong histogram + trend
   else if (macd.histogram[last] > 0 && macd.histogram[last] > macd.histogram[prev] && rsi[last] > 50 && rsi[last] < 70) {
     signal = 0.5;
     confidence = 0.55;
@@ -144,7 +137,6 @@ export function SRBounce(candles) {
   let signal = 0;
   let confidence = 0;
 
-  // Find nearest levels
   const supports = sr.filter(l => l.type === "support" && l.price < currentPrice);
   const resistances = sr.filter(l => l.type === "resistance" && l.price > currentPrice);
   const nearSupport = supports[0];
@@ -153,7 +145,6 @@ export function SRBounce(candles) {
   if (nearSupport) {
     const distPct = (currentPrice - nearSupport.price) / currentPrice;
     if (distPct < 0.01 && rsi[last] < 40) {
-      // Bounce off support
       signal = 0.6 + nearSupport.strength * 0.1;
       confidence = 0.6 + nearSupport.strength * 0.05;
     }
@@ -162,7 +153,6 @@ export function SRBounce(candles) {
   if (nearResistance) {
     const distPct = (nearResistance.price - currentPrice) / currentPrice;
     if (distPct < 0.01 && rsi[last] > 60) {
-      // Rejection at resistance
       signal = -(0.6 + nearResistance.strength * 0.1);
       confidence = 0.6 + nearResistance.strength * 0.05;
     }
@@ -195,12 +185,10 @@ export function VolumeBreakout(candles) {
   let signal = 0;
   let confidence = 0;
 
-  // Volume spike detection
   const volRatio = volumes[last] / (avgVol[last] || 1);
   const priceChange = (closes[last] - closes[last - 1]) / closes[last - 1];
 
   if (volRatio > 2.0 && Math.abs(priceChange) > 0.005) {
-    // High volume breakout
     if (priceChange > 0 && ema9[last] > ema21[last]) {
       signal = Math.min(1, volRatio * 0.3);
       confidence = Math.min(0.85, 0.5 + volRatio * 0.1);
@@ -209,7 +197,6 @@ export function VolumeBreakout(candles) {
       confidence = Math.min(0.85, 0.5 + volRatio * 0.1);
     }
   }
-  // Volume divergence (price up, volume down → weak move)
   else if (priceChange > 0.01 && volRatio < 0.7) {
     signal = -0.3;
     confidence = 0.5;
@@ -228,15 +215,11 @@ export function VolumeBreakout(candles) {
 }
 
 // ─── 6. SoSoValue Sentiment Strategy ───────────────────────
-// Treats external sentiment as a peer strategy with equal voting power
 export function SoSoValueSentiment(sentimentData) {
   const { score = 0, confidence = 0, articleCount = 0 } = sentimentData || {};
-  // Only vote if we have meaningful confidence
   if (confidence < 0.2 || articleCount === 0) {
     return { name: "sosovalue_sentiment", signal: 0, confidence: 0, meta: { articleCount } };
   }
-  // Sentiment score maps -1..1 to signal strength
-  // Strong sentiment (>0.6 conf) gets amplified
   const signal = score * Math.min(1, confidence * 1.5);
   return {
     name: "sosovalue_sentiment",
@@ -246,10 +229,39 @@ export function SoSoValueSentiment(sentimentData) {
   };
 }
 
-// ─── Vibe Score ────────────────────────────────────────────
-// Aggregates sentiment + funding + technical consensus into a single vibe
-// 1.0 = extremely bullish vibe, -1.0 = extremely bearish, 0 = neutral
-export function computeVibeScore(strategies, sentiment, funding) {
+// ─── 7. ETF Flow Strategy ──────────────────────────────────
+export function ETFFlow(etfData) {
+  const { signal: rawSignal = 0, confidence: rawConfidence = 0, meta = {} } = etfData || {};
+  if (!etfData || rawConfidence < 0.2) {
+    return { name: "etf_flow", signal: 0, confidence: 0, stopLoss: null, takeProfit: null, meta: { status: "insufficient_data" } };
+  }
+  let signal = rawSignal;
+  let confidence = rawConfidence;
+  const consecutiveDays = meta.consecutiveDays || 0;
+  if (consecutiveDays >= 5) { confidence = Math.min(1, confidence * 1.3); signal = Math.max(-1, Math.min(1, signal * 1.2)); }
+  else if (consecutiveDays >= 3) { confidence = Math.min(1, confidence * 1.15); signal = Math.max(-1, Math.min(1, signal * 1.1)); }
+  return {
+    name: "etf_flow",
+    signal, confidence,
+    stopLoss: null, takeProfit: null,
+    meta: { latestInflow: meta.latestInflow, latestDate: meta.latestDate, totalNetAssets: meta.totalNetAssets, consecutiveDays, trend7d: meta.trend7d },
+  };
+}
+
+// ─── Normalize weights to sum to 1.0 ──────────────────────
+function normalizeWeights(weights) {
+  if (!weights || Object.keys(weights).length === 0) return null;
+  const total = Object.values(weights).reduce((sum, w) => sum + (Number(w) || 0), 0);
+  if (total <= 0) return null;
+  const norm = {};
+  for (const [k, v] of Object.entries(weights)) norm[k] = (Number(v) || 0) / total;
+  return norm;
+}
+
+// ─── Vibe Score v2 ─────────────────────────────────────────
+// Defaults: Tech 30% | LLM Sentiment 20% | ETF Flow 15% | Funding 15% | Macro 10% | Market 10%
+// If strategyWeights provided, they are normalized and override the defaults.
+export function computeVibeScore(strategies, sentiment, funding, etfFlow = null, macroSignal = null, strategyWeights = null) {
   const techSignal = strategies.filter(s => s.signal !== 0);
   const techAvg = techSignal.length > 0
     ? techSignal.reduce((sum, s) => sum + s.signal * s.confidence, 0) / techSignal.reduce((sum, s) => sum + s.confidence, 0)
@@ -264,47 +276,73 @@ export function computeVibeScore(strategies, sentiment, funding) {
   const fundSignal = funding?.signal || 0;
   const fundConf = funding?.confidence || 0;
 
-  // Vibe = weighted blend: 50% technical, 30% sentiment, 20% funding
-  const vibe = techAvg * 0.5 + sentSignal * 0.3 + fundSignal * 0.2;
-  const vibeConf = Math.min(1, techConf * 0.5 + sentConf * 0.3 + fundConf * 0.2 + 0.1);
+  const etfSignal = etfFlow?.signal || 0;
+  const etfConf = etfFlow?.confidence || 0;
 
-  // Consensus check: do all 3 agree?
-  const allLong = techAvg > 0.2 && sentSignal > 0.1 && fundSignal > 0;
-  const allShort = techAvg < -0.2 && sentSignal < -0.1 && fundSignal < 0;
+  const macroSig = macroSignal?.signal || 0;
+  const macroConf = macroSignal?.confidence || 0;
+
+  // Build weights: either from user config (normalized) or defaults
+  const norm = normalizeWeights(strategyWeights);
+  const wTech = norm ? (
+    (norm.trend_following || 0) +
+    (norm.mean_reversion || 0) +
+    (norm.momentum || 0) +
+    (norm.sr_bounce || 0) +
+    (norm.volume_breakout || 0)
+  ) : 0.30;
+  const wSent = norm ? (norm.sosovalue_sentiment || 0) : 0.20;
+  const wEtf = norm ? (norm.etf_flow || 0) : 0.15;
+  const wFund = norm ? 0.15 : 0.15; // funding not toggleable, always 15%
+  const wMacro = norm ? 0.10 : 0.10; // macro not toggleable, always 10%
+  const wMarket = norm ? 0.10 : 0.10; // market context, always 10%
+  // Re-normalize in case some categories are disabled
+  const totalW = wTech + wSent + wEtf + wFund + wMacro + wMarket;
+  const nTech = totalW > 0 ? wTech / totalW : 0;
+  const nSent = totalW > 0 ? wSent / totalW : 0;
+  const nEtf = totalW > 0 ? wEtf / totalW : 0;
+  const nFund = totalW > 0 ? wFund / totalW : 0;
+  const nMacro = totalW > 0 ? wMacro / totalW : 0;
+  const nMarket = totalW > 0 ? wMarket / totalW : 0;
+
+  const vibe = techAvg * nTech + sentSignal * nSent + etfSignal * nEtf + fundSignal * nFund + macroSig * nMacro + techAvg * nMarket;
+  const vibeConf = Math.min(1, techConf * nTech + sentConf * nSent + etfConf * nEtf + fundConf * nFund + macroConf * nMacro + 0.10);
+
+  // Full consensus: tech, sentiment, ETF, funding all agree
+  const allLong = techAvg > 0.15 && sentSignal > 0.05 && etfSignal > 0 && fundSignal > 0;
+  const allShort = techAvg < -0.15 && sentSignal < -0.05 && etfSignal < 0 && fundSignal < 0;
   const fullConsensus = allLong || allShort;
 
   return {
     vibe: Math.max(-1, Math.min(1, vibe)),
     confidence: vibeConf,
     fullConsensus,
+    weights: { tech: nTech, sentiment: nSent, etf: nEtf, funding: nFund, macro: nMacro, market: nMarket },
     breakdown: {
       technical: { signal: techAvg, confidence: techConf },
       sentiment: { signal: sentSignal, confidence: sentConf },
+      etfFlow: { signal: etfSignal, confidence: etfConf },
       funding: { signal: fundSignal, confidence: fundConf },
+      macro: { signal: macroSig, confidence: macroConf },
     },
   };
 }
 
 // ─── AutoHedge Position Sizer ──────────────────────────────
-// Sizes up when vibe confirms technicals, sizes down (or hedges) when they conflict
 export function computePositionSize(baseSize, vibeScore, technicalSignal) {
   const { vibe, confidence, fullConsensus } = vibeScore;
-  const alignment = vibe * technicalSignal; // positive = aligned, negative = conflict
-
+  const alignment = vibe * technicalSignal;
   let sizeMultiplier = 1.0;
   if (fullConsensus) {
-    sizeMultiplier = 1.5; // All 3 agree → size up 50%
+    sizeMultiplier = 1.5;
   } else if (alignment > 0.3) {
-    sizeMultiplier = 1.25; // Strong alignment → size up 25%
+    sizeMultiplier = 1.25;
   } else if (alignment < -0.2) {
-    sizeMultiplier = 0.5; // Conflict → size down 50% (hedge)
+    sizeMultiplier = 0.5;
   } else if (alignment < 0) {
-    sizeMultiplier = 0.75; // Mild conflict → size down 25%
+    sizeMultiplier = 0.75;
   }
-
-  // Confidence scaling: high confidence = full size, low confidence = reduce
   sizeMultiplier *= (0.5 + confidence * 0.5);
-
   return {
     size: baseSize * sizeMultiplier,
     multiplier: sizeMultiplier,
@@ -313,24 +351,27 @@ export function computePositionSize(baseSize, vibeScore, technicalSignal) {
   };
 }
 
-// ─── Swarm Synthesizer (combines all strategies) ───────────
-// options: { maxLeverage: number, sentiment?: object, funding?: object }
+// ─── Swarm Synthesizer (all strategies) ────────────────────
 export function synthesizeSignals(strategies, currentPrice, options = {}) {
   const maxLeverage = options.maxLeverage || 1;
   const sentiment = options.sentiment || null;
   const funding = options.funding || null;
+  const etfFlow = options.etfFlow || null;
+  const macroSignal = options.macroSignal || null;
+  const strategyWeights = options.strategyWeights || null;
 
-  // Add SoSoValue as a peer strategy if available
-  if (sentiment) {
-    strategies = [...strategies, SoSoValueSentiment(sentiment)];
-  }
+  let allStrategies = [...strategies];
 
-  // Weight by confidence
+  // Add sentiment as peer strategy
+  if (sentiment) allStrategies.push(SoSoValueSentiment(sentiment));
+  // Add ETF flow as peer strategy
+  if (etfFlow && etfFlow.confidence > 0.2) allStrategies.push(ETFFlow(etfFlow));
+
   let weightedSignal = 0;
   let totalWeight = 0;
   const details = [];
 
-  for (const s of strategies) {
+  for (const s of allStrategies) {
     if (s.signal === 0) continue;
     const weight = s.confidence;
     weightedSignal += s.signal * weight;
@@ -338,66 +379,48 @@ export function synthesizeSignals(strategies, currentPrice, options = {}) {
     details.push({ name: s.name, signal: s.signal.toFixed(2), confidence: s.confidence.toFixed(2) });
   }
 
-  const activeStrategies = strategies.filter(s => s.signal !== 0);
-  const activeCount = activeStrategies.length;
-
+  const activeCount = allStrategies.filter(s => s.signal !== 0).length;
   const finalSignal = totalWeight > 0 ? weightedSignal / totalWeight : 0;
   const avgConfidence = activeCount > 0 ? totalWeight / activeCount : 0;
 
-  // Agreement bonus: if 3+ strategies agree direction
-  const longCount = strategies.filter(s => s.signal > 0.3).length;
-  const shortCount = strategies.filter(s => s.signal < -0.3).length;
+  const longCount = allStrategies.filter(s => s.signal > 0.3).length;
+  const shortCount = allStrategies.filter(s => s.signal < -0.3).length;
   const agreementBonus = Math.max(longCount, shortCount) >= 3 ? 0.15 : 0;
-
   const adjustedConfidence = Math.min(1, avgConfidence + agreementBonus);
 
-  // Consensus filter: require at least 2 strategies to agree on the FINAL direction,
-  // OR a very strong weighted signal, OR only 1 strategy is active (no one to disagree with)
-  const supportingCount = strategies.filter(s =>
+  const supportingCount = allStrategies.filter(s =>
     finalSignal > 0 ? s.signal > 0 : s.signal < 0
   ).length;
   const strongDisagreement = (longCount >= 1 && shortCount >= 1) && Math.abs(finalSignal) < 0.4;
   const hasConsensus = supportingCount >= 2 || Math.abs(finalSignal) >= 0.6 || activeCount === 1;
 
-  // Determine action — use inclusive threshold so edge cases like -0.30 trigger
   let action = "hold";
   if (finalSignal >= 0.25 && adjustedConfidence >= 0.5 && hasConsensus) action = "long";
   else if (finalSignal <= -0.25 && adjustedConfidence >= 0.5 && hasConsensus) action = "short";
 
-  // Hold reason for logging
   let holdReason = "";
   if (Math.abs(finalSignal) < 0.25) holdReason = "weak_signal";
   else if (adjustedConfidence < 0.5) holdReason = "low_confidence";
   else if (!hasConsensus) holdReason = strongDisagreement ? "strong_disagreement" : "no_consensus";
 
-  // Compute Vibe Score for position sizing
-  const vibeScore = computeVibeScore(strategies, sentiment, funding);
+  const vibeScore = computeVibeScore(allStrategies, sentiment, funding, etfFlow, macroSignal, strategyWeights);
 
-  // Best stop loss from highest confidence strategy
-  const bestStrategy = strategies.filter(s => s.stopLoss).sort((a, b) => b.confidence - a.confidence)[0];
-  const atr = strategies.find(s => s.meta?.atr)?.meta?.atr || currentPrice * 0.02;
+  const bestStrategy = allStrategies.filter(s => s.stopLoss).sort((a, b) => b.confidence - a.confidence)[0];
+  const atr = allStrategies.find(s => s.meta?.atr)?.meta?.atr || currentPrice * 0.02;
 
   let stopLoss = bestStrategy?.stopLoss || null;
   let takeProfit = bestStrategy?.takeProfit || null;
-
   if (!stopLoss && action === "long") stopLoss = Math.round((currentPrice - atr * 1.5) * 100) / 100;
   if (!stopLoss && action === "short") stopLoss = Math.round((currentPrice + atr * 1.5) * 100) / 100;
   if (!takeProfit && action === "long") takeProfit = Math.round((currentPrice + atr * 3) * 100) / 100;
   if (!takeProfit && action === "short") takeProfit = Math.round((currentPrice - atr * 3) * 100) / 100;
 
   return {
-    action,
-    signal: Math.max(-1, Math.min(1, finalSignal)),
-    confidence: adjustedConfidence,
+    action, signal: Math.max(-1, Math.min(1, finalSignal)), confidence: adjustedConfidence,
     entryPrice: currentPrice,
     stopLoss: stopLoss ? Math.round(stopLoss * 100) / 100 : null,
     takeProfit: takeProfit ? Math.round(takeProfit * 100) / 100 : null,
     leverage: maxLeverage,
-    details,
-    longVotes: longCount,
-    shortVotes: shortCount,
-    hasConsensus,
-    holdReason,
-    vibeScore,
+    details, longVotes: longCount, shortVotes: shortCount, hasConsensus, holdReason, vibeScore,
   };
 }

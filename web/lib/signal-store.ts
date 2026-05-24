@@ -1,5 +1,4 @@
 // Server-side signal store — persists latest signals across requests
-// In production this would be Redis; for now module-level memory
 
 interface Signal {
   id: string;
@@ -13,6 +12,21 @@ interface Signal {
   confidence: number;
   longVotes: number;
   shortVotes: number;
+  reasoning?: string | null;
+  riskFactors?: string[];
+  vibeScore?: {
+    vibe: number;
+    confidence: number;
+    fullConsensus: boolean;
+    breakdown: Record<string, { signal: number; confidence: number }>;
+  };
+  etfFlow?: {
+    signal: number;
+    trend: string;
+    latestInflow: number;
+  } | null;
+  macroAlert?: string | null;
+  details?: Array<Record<string, unknown>>;
   queuedAt: number;
 }
 
@@ -27,5 +41,3 @@ export function setSignals(signals: Signal[]) {
   latestSignals = signals;
   lastCycleTime = Date.now();
 }
-
-
