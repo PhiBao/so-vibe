@@ -106,19 +106,44 @@ export default function BotsPage() {
       const savedLogs = localStorage.getItem("bot-logs");
       if (savedLogs) setLogs(JSON.parse(savedLogs));
     } catch {}
-    try {
-      const savedConfig = localStorage.getItem("bot-config");
-      if (savedConfig) {
-        const parsed = JSON.parse(savedConfig);
-        setConfig({
-          minConfidence: typeof parsed.minConfidence === "number" ? parsed.minConfidence : DEFAULT_CONFIG.minConfidence,
-          maxMarginPct: typeof parsed.maxMarginPct === "number" ? parsed.maxMarginPct : DEFAULT_CONFIG.maxMarginPct,
-          symbols: Array.isArray(parsed.symbols) ? parsed.symbols : DEFAULT_CONFIG.symbols,
-          interval: typeof parsed.interval === "number" ? parsed.interval : DEFAULT_CONFIG.interval,
-          strategyConfig: parsed.strategyConfig || DEFAULT_STRATEGY_CONFIG,
-        });
+
+    // Load config from URL param first, then localStorage
+    let loadedFromUrl = false;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const encoded = params.get("config");
+      if (encoded) {
+        try {
+          const json = decodeURIComponent(atob(encoded));
+          const parsed = JSON.parse(json);
+          setConfig({
+            minConfidence: typeof parsed.minConfidence === "number" ? parsed.minConfidence : DEFAULT_CONFIG.minConfidence,
+            maxMarginPct: typeof parsed.maxMarginPct === "number" ? parsed.maxMarginPct : DEFAULT_CONFIG.maxMarginPct,
+            symbols: Array.isArray(parsed.symbols) ? parsed.symbols : DEFAULT_CONFIG.symbols,
+            interval: typeof parsed.interval === "number" ? parsed.interval : DEFAULT_CONFIG.interval,
+            strategyConfig: parsed.strategyConfig || DEFAULT_STRATEGY_CONFIG,
+          });
+          loadedFromUrl = true;
+          addToast("Strategy config loaded from shared link", "success");
+        } catch {}
       }
-    } catch {}
+    }
+
+    if (!loadedFromUrl) {
+      try {
+        const savedConfig = localStorage.getItem("bot-config");
+        if (savedConfig) {
+          const parsed = JSON.parse(savedConfig);
+          setConfig({
+            minConfidence: typeof parsed.minConfidence === "number" ? parsed.minConfidence : DEFAULT_CONFIG.minConfidence,
+            maxMarginPct: typeof parsed.maxMarginPct === "number" ? parsed.maxMarginPct : DEFAULT_CONFIG.maxMarginPct,
+            symbols: Array.isArray(parsed.symbols) ? parsed.symbols : DEFAULT_CONFIG.symbols,
+            interval: typeof parsed.interval === "number" ? parsed.interval : DEFAULT_CONFIG.interval,
+            strategyConfig: parsed.strategyConfig || DEFAULT_STRATEGY_CONFIG,
+          });
+        }
+      } catch {}
+    }
   }, []);
 
   useEffect(() => {
@@ -659,26 +684,46 @@ export default function BotsPage() {
           <div>
             <div className="text-[12px] font-bold tracking-wider text-[var(--cyan)]">STRATEGY_CONFIG_CARD</div>
             <div className="text-[11px] text-[var(--text-secondary)] font-mono mt-1">
-              Share this config to let others replicate your strategy setup. Copy the JSON below or share as a URL.
+              Share this config to let others replicate your strategy setup. Copy as JSON or share via URL.
             </div>
           </div>
-          <button
-            onClick={() => {
-              const card = {
-                name: "SoVibe Strategy Config",
-                minConfidence: config.minConfidence,
-                maxMarginPct: config.maxMarginPct,
-                symbols: config.symbols,
-                interval: config.interval,
-                strategyConfig: config.strategyConfig,
-              };
-              navigator.clipboard.writeText(JSON.stringify(card, null, 2));
-              addToast("Config copied to clipboard", "success");
-            }}
-            className="btn-terminal text-[11px] py-1.5 px-3"
-          >
-            [ COPY CONFIG ]
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                const card = {
+                  name: "SoVibe Strategy Config",
+                  minConfidence: config.minConfidence,
+                  maxMarginPct: config.maxMarginPct,
+                  symbols: config.symbols,
+                  interval: config.interval,
+                  strategyConfig: config.strategyConfig,
+                };
+                navigator.clipboard.writeText(JSON.stringify(card, null, 2));
+                addToast("Config copied to clipboard", "success");
+              }}
+              className="btn-terminal text-[11px] py-1.5 px-3"
+            >
+              [ COPY JSON ]
+            </button>
+            <button
+              onClick={() => {
+                const card = {
+                  minConfidence: config.minConfidence,
+                  maxMarginPct: config.maxMarginPct,
+                  symbols: config.symbols,
+                  interval: config.interval,
+                  strategyConfig: config.strategyConfig,
+                };
+                const encoded = btoa(encodeURIComponent(JSON.stringify(card)));
+                const url = `${window.location.origin}/bots?config=${encoded}`;
+                navigator.clipboard.writeText(url);
+                addToast("Shareable URL copied!", "success");
+              }}
+              className="btn-terminal btn-terminal-green text-[11px] py-1.5 px-3"
+            >
+              [ COPY SHARE LINK ]
+            </button>
+          </div>
         </div>
       </div>
     </div>

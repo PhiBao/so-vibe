@@ -680,3 +680,50 @@ export function generateSyntheticCandles(symbol: string, limit: number): Candle[
 // ─── Utility Exports ───────────────────────────────────────
 
 export { getChainId, getDomain, computePayloadHash, getNonce, getAccountID, PERPS_BASE, GW_BASE };
+
+// ─── Wallet Profile / Copy-Trading Methods ─────────────────
+
+export async function getWalletTrades(address: string, symbol?: string, limit = 500) {
+  let url = `${PERPS_BASE}/accounts/${address}/trades?limit=${limit}`;
+  if (symbol) url += `&symbol=${symbol}`;
+  const data = await sodexGet(url);
+  const raw = data?.data || [];
+  return (Array.isArray(raw) ? raw : []).map((t: any) => ({
+    id: t.i || t.t || 0,
+    time: t.T || t.time || 0,
+    symbol: t.s || t.symbol || "",
+    side: t.S || t.side || "BUY",
+    price: parseFloat(t.p || t.price || 0),
+    quantity: parseFloat(t.q || t.quantity || 0),
+    notional: parseFloat(t.p || t.price || 0) * parseFloat(t.q || t.quantity || 0),
+  }));
+}
+
+export async function getWalletPosHistory(address: string, symbol?: string, limit = 500) {
+  let url = `${PERPS_BASE}/accounts/${address}/positions/history?limit=${limit}`;
+  if (symbol) url += `&symbol=${symbol}`;
+  const data = await sodexGet(url);
+  const raw = data?.data || [];
+  return (Array.isArray(raw) ? raw : []).map((p: any) => ({
+    symbol: p.s || p.symbol || "",
+    side: parseFloat(p.sz || p.size || "0") > 0 ? "long" : "short",
+    size: Math.abs(parseFloat(p.sz || p.size || 0)),
+    entryPrice: parseFloat(p.ep || p.entryPrice || 0),
+    exitPrice: parseFloat(p.xp || p.exitPrice || 0),
+    realizedPnl: parseFloat(p.rp || p.realizedPnl || p.npl || 0),
+    openTime: p.ot || p.openTime || 0,
+    closeTime: p.ct || p.closeTime || 0,
+  }));
+}
+
+export async function getWalletFundings(address: string, symbol?: string, limit = 500) {
+  let url = `${PERPS_BASE}/accounts/${address}/fundings?limit=${limit}`;
+  if (symbol) url += `&symbol=${symbol}`;
+  const data = await sodexGet(url);
+  const raw = data?.data || [];
+  return (Array.isArray(raw) ? raw : []).map((f: any) => ({
+    symbol: f.s || f.symbol || "",
+    amount: parseFloat(f.a || f.amount || f.pa || 0),
+    time: f.T || f.time || f.t || 0,
+  }));
+}

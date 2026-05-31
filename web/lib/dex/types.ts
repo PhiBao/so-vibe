@@ -250,3 +250,55 @@ export interface DexConfig {
   chainId?: number;
   extras?: Record<string, unknown>;
 }
+
+// ─── Wallet Profile / Copy-Trading Types ───────────────────
+
+export interface WalletTrade {
+  id: number;
+  time: number;
+  symbol: string;
+  side: "BUY" | "SELL";
+  price: number;
+  quantity: number;
+  notional: number;
+}
+
+export interface WalletPosition {
+  symbol: string;
+  side: string;
+  size: number;
+  entryPrice: number;
+  exitPrice: number;
+  realizedPnl: number;
+  openTime: number;
+  closeTime: number;
+}
+
+export interface WalletFunding {
+  symbol: string;
+  amount: number;
+  time: number;
+}
+
+export interface WalletProfile {
+  address: string;
+  accountID: number;
+  equity: number;
+  totalTrades: number;
+  winRate: number;
+  avgWin: number;
+  avgLoss: number;
+  profitFactor: number;
+  totalReturn: number;
+  bestTrade: number;
+  worstTrade: number;
+  maxDrawdown: number;
+  sharpe: number;
+  avgHoldMinutes: number;
+  lastActive: number | null;
+  currentPositions: Array<{ symbol: string; side: string; size: number; entryPrice: number }>;
+  strategyType: string;
+  strategyConfidence: number;
+  fundings: { totalEarned: number; totalPaid: number };
+  recentTrades: Array<{ time: number; symbol: string; side: string; pnl: number }>;
+}
