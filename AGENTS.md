@@ -182,11 +182,22 @@ Config is persisted in `localStorage` and sent to the bot cycle API.
 
 ## Backtest Engine
 
-Dual data source support:
-- **SoDEX testnet 1h candles** — real on-chain data
-- **SoSoValue 1d klines** — expands daily into 24 synthetic hourly bars for cross-reference
+Real data only:
+- **SoDEX 1h candles** — real on-chain data
+- **SoSoValue 1d klines** — native daily bars (no synthetic expansion)
+- **Combined mode** — run both and compare side-by-side
 
-Metrics: Total Return, Sharpe, Sortino, Max Drawdown, Win Rate, Profit Factor, Avg Win/Loss, Final Capital.
+Inputs: full swarm (technical strategies + sentiment + ETF flow + funding + macro), Strategy Builder weights, configurable slippage (0–15 bps), confidence threshold.
+
+Metrics: Total Return, Sharpe, Sortino, Max Drawdown, Win Rate, Profit Factor, Avg Win/Loss, Final Capital, Expectancy, False-Positive Rate, Avg Bars to TP/SL, Max Consecutive Losses, Exit-Reason Breakdown. Optional confidence×leverage parameter sweep sorted by Sharpe.
+
+## Live PnL
+
+Computed only from on-chain closed fills:
+- `/api/bot/fills` returns closed position history
+- `/api/bot/record-fills` persists new closed trades to `.pnl-trades.json`
+- Dashboard `PnLWidget` shows Net PnL, Win Rate, Sharpe, Max Drawdown, equity-curve sparkline, recent trades
+- `/bots` `SignalAccuracyPanel` shows hit rate and avg slippage from real fills
 
 ## Security Checklist
 

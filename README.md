@@ -53,7 +53,11 @@ SoVibe turns raw market data + ETF flows + macro context + LLM-analyzed news int
 | Copy-trading (one-click proportional mirroring) | Live |
 | SoDEX EIP712 market orders | Live |
 | SL/TP automation | Live |
-| Dual-source backtest (SoDEX + SoSoValue) | Live |
+| Dual-source backtest with real data only, slippage modeling, parameter sweep | Live |
+| Live PnL + Signal Accuracy from on-chain fills | Live |
+| Copy-trading leaderboard with curated wallet discovery | Live |
+| Encrypted local auto-trading bot keys | Live |
+| Testnet / mainnet network switch | Live |
 | Full SoSoValue news with currency/tag/category filters | Live |
 | Cyberpunk terminal UI | Live |
 
@@ -91,7 +95,7 @@ SoVibe turns raw market data + ETF flows + macro context + LLM-analyzed news int
 ├──────────────────────────────────────────────────────┤
 │                API Routes (Next.js)                  │
 │  /api/bot/*  /api/trade  /api/wallet/*  /api/news   │
-│  /api/positions/*  /api/backtest  /api/wallet/copy  │
+│  /api/positions/*  /api/backtest  /api/config       │
 ├──────────────────────────────────────────────────────┤
 │              DEX Adapter Layer                       │
 │           lib/dex/sodex-adapter.ts                   │
@@ -253,6 +257,9 @@ npm run dev   # localhost:3000
 - [x] Copy-trading leaderboard with curated wallet ranking
 - [x] Wallet profile reuse across profile and leaderboard APIs
 - [x] Multi-timeframe signal aggregation (15m / 1h / 4h / 1d)
+- [x] Robust real-data-only backtest with slippage modeling, false-positive analysis, parameter sweep
+- [x] Live PnL + Signal Accuracy computed from on-chain fills
+- [x] Dashboard PnL widget with equity-curve sparkline
 - [x] Live strategy performance scorecard + file-based PnL
 - [x] Hardened security: client-side bot signing, sanitized API errors
 
@@ -265,10 +272,12 @@ npm run dev   # localhost:3000
 - [x] Config card sharing
 - [x] Copy-trading
 
-### Next — Wave 4
-- [ ] Auto-copy mode (continuous position mirroring)
-- [ ] Telegram/Discord bot for signals
-- [ ] Referral program with fee rebates
+### Next / Research
+- **Walk-forward analysis** — split historical data into in-sample training and out-of-sample validation periods to measure signal decay.
+- **Adaptive strategy weights** — let the bot rebalance swarm weights based on recent live performance per strategy.
+- **On-chain fill slippage model** — build a per-symbol slippage estimator from actual executed fills rather than static bps assumptions.
+- **Monte-Carlo simulation** — run thousands of randomized equity-path simulations on top of backtest trades to estimate tail-risk probabilities.
+- **Referral + copy-trading incentives** — on-chain referral codes and follower fee rebates.
 
 ---
 
@@ -278,25 +287,29 @@ npm run dev   # localhost:3000
 web/
 ├── app/
 │   ├── api/
-│   │   ├── bot/              # Bot cycle, execute, signals, status, toggle
+│   │   ├── bot/              # Bot cycle, auto-execute, execute, signals, status, toggle, PnL, fills, register-key
+│   │   ├── config/           # Runtime network config persistence
 │   │   ├── market/           # Market data
 │   │   ├── markets/          # All market limits
 │   │   ├── news/             # Enriched SoSoValue news
 │   │   ├── positions/        # Close position, SL/TP
-│   │   ├── wallet/           # Balance, deposit, withdraw, profile, copy
-│   │   └── backtest/         # Dual-source backtest
+│   │   ├── wallet/           # Balance, deposit, withdraw, profile, copy, leaderboard
+│   │   └── backtest/         # Real-data backtest
 │   ├── backtest/             # Backtest UI
 │   ├── bots/                 # Bot control + strategy builder
 │   ├── news/                 # News feed with filters
 │   ├── positions/            # Position monitor
+│   ├── settings/             # Network + encrypted bot key settings
 │   ├── trade/                # Manual trade execution
-│   ├── wallet/               # Wallet analyzer + copy-trading
+│   ├── wallet/               # Wallet analyzer + leaderboard
 │   ├── globals.css           # Cyberpunk design system
-│   ├── layout.tsx            # Terminal layout
+│   ├── layout.tsx            # Terminal layout wrapper
 │   ├── page.tsx              # Dashboard
 │   └── providers.tsx         # Wallet context
 ├── components/
 │   ├── TerminalLayout.tsx    # Sidebar + nav + wallet panel
+│   ├── NetworkSwitch.tsx     # TESTNET/MAINNET dropdown
+│   ├── PnLWidget.tsx         # Dashboard live PnL + equity curve
 │   ├── ToastProvider.tsx     # Toast notifications
 │   └── WalletProvider.tsx    # Wagmi provider
 ├── lib/
@@ -306,11 +319,12 @@ web/
 │   │   └── sodex-adapter.ts  # SoDEX adapter + wallet methods
 │   ├── engine/
 │   │   ├── signals.js        # 7-strategy swarm + Vibe Score v2
-│   │   ├── backtest.js       # Backtest engine
+│   │   ├── backtest.js       # Backtest engine (real data, slippage, parameter sweep)
 │   │   ├── indicators.js     # Technical indicators
 │   │   ├── funding.js        # Funding rate analysis
 │   │   ├── market.js         # Market data wrapper
 │   │   ├── llm-agent.ts      # DGrid AI client
+│   │   ├── pnl-tracker.ts    # File-based closed-trade PnL persistence
 │   │   └── strategies/
 │   │       └── etf-flow.js   # ETF flow strategy
 │   ├── sosovalue/
@@ -322,7 +336,14 @@ web/
 │   ├── signal-store.ts       # Signal persistence
 │   ├── use-sodex-tx.ts       # EIP712 signing hook
 │   ├── security.ts           # Security auditor
-│   └── data-store.ts         # State storage
+│   ├── data-store.ts         # State storage
+│   ├── config.ts             # Client-safe network config
+│   ├── config-server.ts      # Server-side runtime config loader
+│   ├── api-error.ts          # API error sanitizer
+│   ├── encrypted-store.ts    # Password-encrypted browser keystore for bot keys
+│   ├── bot-signer-client.ts  # Client-side EIP712 bot signer
+│   ├── leaderboard-wallets.ts# Curated wallet list for leaderboard
+│   └── wallet-profile.ts     # Shared wallet analytics builder
 ```
 
 ---

@@ -1,7 +1,12 @@
 import "@/lib/config-server";
 import { NextResponse } from "next/server";
 import { getAdapter, initDex } from "@/lib/dex";
-import { Backtester } from "@/lib/engine/backtest.js";
+import { Backtester, runParameterSweep } from "@/lib/engine/backtest.js";
+import { getCachedSentiment } from "@/lib/sentiment-engine";
+import { getETFSignal } from "@/lib/sosovalue/etf";
+import { getMacroSignal } from "@/lib/sosovalue/macro";
+import { analyzeFunding } from "@/lib/engine/funding.js";
+import { sanitizeError } from "@/lib/api-error";
 
 const SOSO_BASE = "https://openapi.sosovalue.com/openapi/v1";
 const API_KEY = process.env.SOSO_API_KEY || "";
@@ -12,56 +17,48 @@ const SYMBOL_TO_CURRENCY_ID: Record<string, string> = {
   BTC: "1673723677362319867",
 };
 
-async function fetchSoSoValueKlines(symbol: string, limit = 200): Promise<any[]> {
-  try {
-    const base = symbol.split("-")[0];
-    const currencyId = SYMBOL_TO_CURRENCY_ID[base];
-    if (!currencyId) return [];
+async function fetchSoSoValueDaily(symbol: string, limit = 200): Promise<any[]> {
+  const base = symbol.split("-")[0];
+  const currencyId = SYMBOL_TO_CURRENCY_ID[base];
+  if (!currencyId) return [];
 
-    const res = await fetch(
-      `${SOSO_BASE}/currencies/${currencyId}/klines?interval=1d&limit=${limit}`,
-      { headers: { "Content-Type": "application/json", "x-soso-api-key": API_KEY } }
-    );
-    if (!res.ok) return [];
-    const data = await res.json();
-    const list = data?.data?.list || data?.data || data || [];
-    if (!Array.isArray(list) || list.length === 0) return [];
+  const res = await fetch(
+    `${SOSO_BASE}/currencies/${currencyId}/klines?interval=1d&limit=${limit}`,
+    { headers: { "Content-Type": "application/json", "x-soso-api-key": API_KEY } }
+  );
+  if (!res.ok) return [];
+  const data = await res.json();
+  const list = data?.data?.list || data?.data || data || [];
+  if (!Array.isArray(list)) return [];
 
-    // Convert 1d klines to 1h by expanding each day into 24 hourly bars
-    const hourly: Array<{ timestamp: number; open: number; high: number; low: number; close: number; volume: number }> = [];
-    for (const day of list) {
-      const { open, high, low, close, volume, timestamp } = day;
-      const dayVolPerHour = (volume || 0) / 24;
-      const range = high - low;
-      const ts = typeof timestamp === "number" ? timestamp : parseInt(timestamp);
-      for (let h = 0; h < 24; h++) {
-        const barTs = ts + h * 3600000;
-        const progress = h / 24;
-        // Simulate intraday movement with small random walk within day range
-        const midPrice = open + (close - open) * progress;
-        const noise = (Math.random() - 0.5) * range * 0.3;
-        const barClose = midPrice + noise;
-        const prevClose = hourly.length > 0 ? hourly[hourly.length - 1].close : open;
-        const barOpen = h === 0 ? open : prevClose;
-        hourly.push({
-          timestamp: barTs,
-          open: barOpen,
-          high: Math.max(barOpen, barClose) + Math.random() * range * 0.15,
-          low: Math.min(barOpen, barClose) - Math.random() * range * 0.15,
-          close: barClose,
-          volume: dayVolPerHour * (0.5 + Math.random()),
-        });
-      }
-    }
-    return hourly;
-  } catch {
-    return [];
-  }
+  return list.map((d: any) => ({
+    timestamp: typeof d.timestamp === "number" ? d.timestamp : parseInt(d.timestamp),
+    open: parseFloat(d.open),
+    high: parseFloat(d.high),
+    low: parseFloat(d.low),
+    close: parseFloat(d.close),
+    volume: parseFloat(d.volume),
+  }));
+}
+
+function getStrategyEnabled(strategyConfig: Record<string, any> | undefined, key: string) {
+  if (!strategyConfig) return true;
+  const cfg = strategyConfig[key];
+  return !cfg || cfg.enabled !== false;
 }
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const { symbol, leverage, dataSource } = body;
+  const {
+    symbol,
+    leverage = 2,
+    dataSource = "sodex",
+    slippageBps = 3,
+    confidenceThreshold = 0.55,
+    strategyConfig = {},
+    maxPositionPct = 0.3,
+    parameterSweep = false,
+  } = body;
 
   if (!symbol || typeof leverage !== "number") {
     return NextResponse.json({ error: "Missing symbol or leverage" }, { status: 400 });
@@ -70,53 +67,89 @@ export async function POST(request: Request) {
   try {
     await initDex();
     const adapter = getAdapter();
-    let candles;
-    let dataSourceLabel = "SoDEX";
+    let candles: any[] = [];
+    let dataSourceLabel = "";
+    let barIntervalHours = 1;
 
-    if (dataSource === "sosovalue") {
-      candles = await fetchSoSoValueKlines(symbol, 42); // 42 days → ~1000 hourly bars
-      if (!candles || candles.length < 100) {
-        candles = null; // fall through to SoDEX
-      } else {
-        dataSourceLabel = "SoSoValue (1d → 1h synthetic)";
-      }
-    }
-
-    if (!candles) {
-      try {
-        candles = await adapter.getCandles(symbol, "1h", 1000);
-        dataSourceLabel = "SoDEX testnet 1h";
-      } catch {
-        // Only use SoSoValue as fallback — no more synthetic candles
-        candles = await fetchSoSoValueKlines(symbol, 42);
-        dataSourceLabel = "SoSoValue 1d (expanded to 1h)";
-      }
+    if (dataSource === "sodex") {
+      candles = await adapter.getCandles(symbol, "1h", 1000);
+      dataSourceLabel = "SoDEX 1h";
+      barIntervalHours = 1;
+    } else if (dataSource === "sosovalue") {
+      candles = await fetchSoSoValueDaily(symbol, 200);
+      dataSourceLabel = "SoSoValue 1d";
+      barIntervalHours = 24;
+    } else if (dataSource === "combined") {
+      // Run both and return both results
+      const [sodexCandles, soSoCandles] = await Promise.all([
+        adapter.getCandles(symbol, "1h", 1000).catch(() => []),
+        fetchSoSoValueDaily(symbol, 200),
+      ]);
+      const runOne = (c: any[], label: string, intervalHours: number) => {
+        if (!c || c.length < 100) return null;
+        const bt = new Backtester({
+          leverage,
+          slippageBps,
+          confidenceThreshold,
+          strategyConfig,
+          maxPositionPct,
+          barIntervalHours: intervalHours,
+        });
+        return { label, ...bt.run(c), candlesUsed: c.length };
+      };
+      return NextResponse.json({
+        combined: true,
+        results: [
+          runOne(sodexCandles, "SoDEX 1h", 1),
+          runOne(soSoCandles, "SoSoValue 1d", 24),
+        ].filter(Boolean),
+      });
     }
 
     if (!candles || candles.length < 100) {
-      return NextResponse.json({ error: "Insufficient candle data" }, { status: 400 });
+      return NextResponse.json({ error: `Insufficient real data from ${dataSourceLabel}` }, { status: 400 });
     }
 
-    const backtester = new Backtester({
-      initialCapital: 10000,
-      leverage,
-      takerFee: 0.0005,
-      makerFee: 0.0002,
-      slippage: 0.0003,
-      fundingRate: 0.0001,
-      maxPositionPct: 0.3,
-      commission: 0.001,
-    });
+    // Gather current full-swarm signals (static across the backtest)
+    const baseSym = symbol.split("-")[0];
+    const sentiment = getStrategyEnabled(strategyConfig, "sosovalue_sentiment")
+      ? (await getCachedSentiment([baseSym]))[baseSym] || null
+      : null;
+    const etfFlow = getStrategyEnabled(strategyConfig, "etf_flow")
+      ? (await getETFSignal(baseSym).catch(() => null))
+      : null;
+    const fundingRate = await adapter.getFundingRate(symbol).catch(() => null);
+    const funding = fundingRate ? analyzeFunding([fundingRate], candles[candles.length - 1].close) : null;
+    const macroSignal = await getMacroSignal().catch(() => ({ signal: 0, confidence: 0 }));
 
-    const result = backtester.run(candles, "swarm");
+    const baseConfig = {
+      leverage,
+      slippageBps,
+      confidenceThreshold,
+      strategyConfig,
+      maxPositionPct,
+      barIntervalHours,
+      sentiment,
+      etfFlow,
+      funding,
+      macroSignal,
+    };
+
+    const backtester = new Backtester(baseConfig);
+    const result = backtester.run(candles);
+
+    let sweep = null;
+    if (parameterSweep) {
+      sweep = runParameterSweep(candles, baseConfig);
+    }
 
     return NextResponse.json({
       ...result,
       dataSource: dataSourceLabel,
       candlesUsed: candles.length,
+      parameterSweep: sweep,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: sanitizeError(err) }, { status: 500 });
   }
 }

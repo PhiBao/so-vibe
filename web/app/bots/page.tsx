@@ -82,6 +82,52 @@ function persistConfig(config: BotConfig) {
 
 // ─── PnL Scorecard Component ─────────────────────────────────
 
+function SignalAccuracyPanel() {
+  const [pnlData, setPnlData] = useState<any>(null);
+
+  useEffect(() => {
+    fetch("/api/bot/pnl").then(r => r.json()).then(setPnlData).catch(() => {});
+    const interval = setInterval(() => {
+      fetch("/api/bot/pnl").then(r => r.json()).then(setPnlData).catch(() => {});
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (!pnlData || pnlData.summary?.totalTrades === 0) return null;
+
+  const s = pnlData.summary;
+  const slippageAvg = pnlData.recentTrades?.length
+    ? pnlData.recentTrades.reduce((acc: number, t: any) => acc + (t.slippageBps || 0), 0) / pnlData.recentTrades.length
+    : 0;
+
+  return (
+    <div className="terminal-card">
+      <div className="terminal-header">
+        <span className="text-[12px] font-bold tracking-wider">SIGNAL_ACCURACY</span>
+        <span className="text-[11px] text-[var(--text-secondary)] ml-auto">from on-chain closed trades</span>
+      </div>
+      <div className="p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-2 text-center bg-white/[0.02] border border-[var(--border)]">
+          <div className="text-[9px] text-[var(--text-secondary)] uppercase">Hit Rate</div>
+          <div className="text-[15px] font-mono font-bold text-[var(--cyan)]">{(s.winRate * 100).toFixed(1)}%</div>
+        </div>
+        <div className="p-2 text-center bg-white/[0.02] border border-[var(--border)]">
+          <div className="text-[9px] text-[var(--text-secondary)] uppercase">Avg Slippage</div>
+          <div className="text-[15px] font-mono font-bold text-[var(--text)]">{slippageAvg.toFixed(1)} bps</div>
+        </div>
+        <div className="p-2 text-center bg-white/[0.02] border border-[var(--border)]">
+          <div className="text-[9px] text-[var(--text-secondary)] uppercase">Net PnL</div>
+          <div className={`text-[15px] font-mono font-bold ${s.netPnl >= 0 ? "text-[var(--green)]" : "text-[var(--red)]"}`}>${s.netPnl.toFixed(2)}</div>
+        </div>
+        <div className="p-2 text-center bg-white/[0.02] border border-[var(--border)]">
+          <div className="text-[9px] text-[var(--text-secondary)] uppercase">Sharpe</div>
+          <div className="text-[15px] font-mono font-bold text-[var(--text)]">{s.sharpe}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PnlScorecard() {
   const [pnlData, setPnlData] = useState<any>(null);
 
@@ -847,6 +893,9 @@ export default function BotsPage() {
 
       {/* Strategy Performance Scorecard */}
       <PnlScorecard />
+
+      {/* Signal Accuracy from on-chain fills */}
+      <SignalAccuracyPanel />
       {/* Config Card Export */}
       <div className="terminal-card p-4">
         <div className="flex items-center justify-between">

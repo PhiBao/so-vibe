@@ -15,10 +15,12 @@ interface ClosedTrade {
   strategy: string;
   entryPrice: number;
   exitPrice: number;
+  expectedPrice?: number;
   size: number;
   realizedPnl: number;
   fees: number;
   netPnl: number;
+  slippageBps?: number;
   entryTime: number;
   exitTime: number;
   holdMinutes: number;
@@ -101,12 +103,16 @@ export function recordTrade(trade: Omit<ClosedTrade, "id" | "netPnl" | "holdMinu
   const holdMinutes = trade.exitTime && trade.entryTime
     ? (trade.exitTime - trade.entryTime) / 60000
     : 0;
+  const slippageBps = trade.expectedPrice && trade.expectedPrice > 0
+    ? Math.round(((trade.entryPrice - trade.expectedPrice) / trade.expectedPrice) * 10000)
+    : undefined;
 
   const closed: ClosedTrade = {
     ...trade,
     id: `pnl_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
     netPnl,
     holdMinutes,
+    slippageBps,
   };
 
   trades.push(closed);

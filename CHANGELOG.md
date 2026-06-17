@@ -2,62 +2,61 @@
 
 ---
 
-## Wave 3 — 2026-06-17 · Mainnet, Encrypted Bot Keys, Leaderboard
+## Wave 3 — 2026-06-17 · Mainnet, Encrypted Bot Keys, Leaderboard, Strategy Validation
 
-### Added
-- **Mainnet / testnet network switch**
-  - Runtime network config persisted in `web/.runtime-config.json`
-  - Header dropdown selects TESTNET or MAINNET; no auto-switch, no modal
-  - Server API routes read the runtime config at import time
-  - Wagmi registers both SoDEX testnet (138565) and mainnet (286623) chains
-- **Encrypted auto-trading bot keys**
-  - `lib/encrypted-store.ts` uses PBKDF2 + AES-GCM with a user password
-  - Private key stored encrypted in `localStorage`; plaintext kept in memory only while unlocked
-  - `/settings` page for saving, unlocking, locking, and clearing bot keys
-  - `lib/bot-signer-client.ts` signs EIP712 orders locally in the browser
-  - `/api/bot/auto-execute` returns unsigned actions for client-side signing
-  - `/api/bot/register-key` builds the on-chain `addAPIKey` registration action
-- **Copy-trading leaderboard**
-  - `/wallet/leaderboard` ranks curated SoDEX wallets by Sharpe, return, win rate, profit factor, or trade count
-  - `LEADERBOARD_WALLETS` env var seeds the list
-  - Each row links directly to `/wallet?address=...` for analyze & copy
-- **Wallet profile reuse**
-  - `lib/wallet-profile.ts` shares analytics logic between profile and leaderboard APIs
-- **Multi-timeframe analysis**
-  - Bot cycle aggregates signals across 15m, 1h, 4h, and 1d timeframes
-  - Weighted consensus (15m=1x, 1h=2x, 4h=3x, 1d=4x) with bonus when 3+ TFs agree
-- **Robust backtest + live PnL**
-  - Backtest engine uses real SoDEX 1h candles or SoSoValue daily klines
-  - File-based PnL persistence (`lib/engine/pnl-tracker.ts`)
-  - Closed trades recorded on execution; per-strategy breakdown
-- **Strategy performance scorecard**
-  - `/bots` displays live Net PnL, Win Rate, Profit Factor, Sharpe, Max Drawdown, Avg Win/Loss
-  - Per-strategy trade counts, win rates, and realized PnL
-- **Settings page**
-  - `/settings` configures network and encrypted bot keys with step-by-step UX
-- **Security hardening**
-  - No server-side bot signer; all bot signing happens client-side with encrypted local keys
-  - Added `lib/api-error.ts` sanitizer; 500 errors return generic messages
-  - Sanitized error responses in `/api/bot/auto-execute`, `/api/bot/execute`, `/api/trade`, `/api/wallet/profile`
-  - Removed production debug logs in `use-sodex-tx.ts`
-  - Documented `NEXT_PUBLIC_RPC_URL` credential risk
+### New Modules (8 files)
 
-### Fixed
-- SoDEX REST v1 endpoint paths:
-  - Perps orders: `/api/v1/perps/trade/orders`
-  - Perps transfers: `/api/v1/perps/accounts/transfers`
-  - Spot transfers: `/api/v1/spot/accounts/transfers`
-- SoDEX request body format: params object only; no `type` wrapper
-- Master-wallet signed requests omit `X-API-Key`; API-key signed requests include `X-API-Key: <name>`
-- SoDEX EIP712 domain now follows the action's own domain (`futures` or `spot`)
-- Mainnet chain ID corrected to `286623` (`0x45f9f`)
-- Mainnet RPC and explorer URLs corrected
-- PnL tracker uses file-based persistence
+lib/config.ts + lib/config-server.ts — Client-safe and server-side runtime network config. Supports SoDEX testnet (chain 138565) and mainnet (chain 286623). Runtime choice persisted in `web/.runtime-config.json` and selected via the header network dropdown.
 
-### Changed
-- `AGENTS.md` updated with Wave 3 architecture, security rules, and roadmap status
-- `.env.example` cleaned up; removed unused `SODEX_API_URL` and `BOT_PRIVATE_KEY`
-- `.gitignore` ignores `.runtime-config.json` and `.pnl-trades.json`
+components/NetworkSwitch.tsx — Header TESTNET/MAINNET dropdown. No auto-switch, no modal. Calls `/api/config` to persist the choice server-side and reloads the page so API routes pick up the new config.
+
+lib/encrypted-store.ts + lib/bot-signer-client.ts — Password-encrypted browser keystore for auto-trading bot keys. PBKDF2 + AES-GCM. Private key encrypted in `localStorage`; plaintext kept in memory only while unlocked. Client-side EIP712 signing for bot orders.
+
+app/api/bot/register-key/route.ts — Builds the unsigned `addAPIKey` on-chain registration action so the master wallet can authorize a new API key before auto-trading.
+
+app/api/bot/auto-execute/route.ts — Returns unsigned market-order + SL/TP actions for client-side signing with the decrypted bot key.
+
+app/api/bot/fills/route.ts + app/api/bot/record-fills/route.ts — Poll SoDEX closed position history for a wallet and record only new on-chain closed trades into `pnl-tracker.ts`. No click-time recording; metrics are computed from real fills.
+
+app/wallet/leaderboard/page.tsx + app/api/wallet/leaderboard/route.ts + lib/leaderboard-wallets.ts — Copy-trading leaderboard. Ranks curated addresses by Sharpe, total return, win rate, profit factor, or trade count. `LEADERBOARD_WALLETS` env var seeds the list. Each row links to `/wallet?address=...` for analyze & copy.
+
+lib/wallet-profile.ts — Shared wallet analytics builder extracted from the profile API so both `/api/wallet/profile` and `/api/wallet/leaderboard` use the same PnL/win-rate calculations.
+
+lib/api-error.ts — API error sanitizer. Unexpected 500s log server-side and return a generic message; validation errors still expose the message.
+
+### Upgraded Modules (8 files)
+
+lib/engine/backtest.js — Rewritten for real-data-only validation. Removed synthetic 1d→1h candle expansion. Supports three data sources: SoDEX 1h, SoSoValue 1d native, and Combined side-by-side. Includes full swarm inputs (sentiment, ETF flow, funding, macro), configurable slippage (0–15 bps), confidence threshold, Strategy Builder weights, exit-reason tagging, false-positive rate, expectancy, avg bars to TP/SL, max consecutive losses, and a confidence×leverage parameter sweep sorted by Sharpe.
+
+app/api/backtest/route.ts — Updated to serve real SoDEX 1h or SoSoValue 1d candles. Returns `Insufficient real data` if the chosen source lacks bars instead of fabricating data. Runs the parameter sweep when requested.
+
+app/backtest/page.tsx — New UI for data-source dropdown, slippage slider, confidence slider, parameter-sweep checkbox, false-positive/expectancy/exit-reason metrics, and a combined-results view.
+
+lib/engine/pnl-tracker.ts — Extended ClosedTrade with `expectedPrice` and `slippageBps`. Computes hit rate, Sharpe, max drawdown, Calmar, expectancy, avg win/loss, best/worst trade, and per-strategy breakdown from closed trades.
+
+components/PnLWidget.tsx + app/page.tsx — Dashboard live PnL widget. Syncs on-chain fills every 30s, shows Net PnL, Win Rate, Sharpe, Max DD, equity-curve sparkline, and recent closed trades.
+
+app/bots/page.tsx — Added SignalAccuracyPanel showing live hit rate, avg slippage, net PnL, and Sharpe from on-chain fills. Added tooltips and banners for AUTO mode bot-key setup.
+
+app/settings/page.tsx — Step-by-step UX for network info, API key registration, encrypted key save/unlock/lock/clear. Removed duplicate network switch buttons in favor of the header dropdown.
+
+lib/dex/sodex-adapter.ts — Fixed SoDEX REST v1 paths (`/api/v1/perps/trade/orders`, `/api/v1/perps/accounts/transfers`, `/api/v1/spot/accounts/transfers`). Request body is now params-only. Domain follows the action's own domain (`futures` or `spot`). Added `buildAddAPIKey`.
+
+### Feature Summary
+
+Mainnet / Testnet Switch — Runtime network selection with server-side persistence. Wagmi registers both chains. EIP712 domains stay in sync.
+
+Encrypted Auto-Trading Bot Keys — API key encrypted with a user password, decrypted only in memory, signs orders locally. No server-side signer. On-chain `addAPIKey` registration flow included.
+
+Copy-Trading Leaderboard — Curated SoDEX wallet discovery ranked by verified on-chain metrics. One-click analyze and copy.
+
+Multi-Timeframe Analysis — Bot cycle aggregates 15m/1h/4h/1d signals with weighted consensus and a +0.10 bonus when 3+ timeframes agree.
+
+Robust Backtest — Real data only (SoDEX 1h or SoSoValue 1d). Full swarm inputs, configurable slippage, false-positive / exit-reason analysis, expectancy, parameter sweep. No synthetic candles.
+
+Live PnL from On-Chain Fills — Closed positions polled from SoDEX and recorded in a local JSON file. Dashboard widget and bots-page Signal Accuracy panel show hit rate, slippage, Sharpe, drawdown, and equity curve.
+
+Security Hardening. Server-side bot signer removed. Internal API errors sanitized. Production debug logs removed. `NEXT_PUBLIC_RPC_URL` credential risk documented.
 
 ---
 

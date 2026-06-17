@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { useToast } from "@/components/ToastProvider";
+import PnLWidget from "@/components/PnLWidget";
 
 function StatBlock({ label, value, sub, color = "cyan" }: { label: string; value: string; sub?: string; color?: "cyan" | "green" | "red" | "magenta" | "yellow" }) {
   const colorMap = { cyan: "text-[var(--cyan)]", green: "text-[var(--green)]", red: "text-[var(--red)]", magenta: "text-[var(--magenta)]", yellow: "text-[var(--yellow)]" };
@@ -139,6 +140,8 @@ export default function Dashboard() {
             <StatBlock label="Win Rate" value={`${stats.winRate as string || "0"}%`} sub={`${stats.totalTrades as number || 0} trades`} color="green" />
             <StatBlock label="Drawdown" value={`${portfolio.drawdown as string || "0"}%`} sub={`PF: ${stats.profitFactor as string || "0"}`} color="yellow" />
           </div>
+
+          <PnLWidget />
 
           <div className="terminal-card border-l-2 border-l-[var(--cyan)] sticky top-4 z-10">
             <div className="terminal-header">
