@@ -1,3 +1,4 @@
+import "@/lib/config-server";
 import { NextResponse } from "next/server";
 import { getAdapter, initDex } from "@/lib/dex";
 import { getAccountID } from "@/lib/dex/sodex-adapter";

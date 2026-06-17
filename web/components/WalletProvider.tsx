@@ -5,32 +5,56 @@ import { WagmiProvider, createConfig, http } from "wagmi";
 import { mainnet } from "wagmi/chains";
 import { injected } from "wagmi/connectors";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  SODEX_NETWORKS,
+  getCurrentNetwork,
+  getCurrentRpcUrl,
+} from "@/lib/config";
 
 export const SODEX_TESTNET = {
-  id: 138565,
-  name: "SoDEX Testnet",
+  id: SODEX_NETWORKS.testnet.chainId,
+  name: SODEX_NETWORKS.testnet.displayName,
   nativeCurrency: {
     name: "SOSO",
     symbol: "SOSO",
     decimals: 18,
   },
   rpcUrls: {
-    default: { http: [process.env.NEXT_PUBLIC_RPC_URL || "https://testnet-v2.valuechain.xyz/"] },
-    public: { http: [process.env.NEXT_PUBLIC_RPC_URL || "https://testnet-v2.valuechain.xyz/"] },
+    default: { http: [SODEX_NETWORKS.testnet.rpcUrl] },
+    public: { http: [SODEX_NETWORKS.testnet.rpcUrl] },
   },
   blockExplorers: {
-    default: { name: "SoDEX Explorer", url: "https://testnet.sodex.com/" },
+    default: { name: "SoDEX Explorer", url: SODEX_NETWORKS.testnet.explorerUrl },
   },
   testnet: true,
 } as const;
 
+export const SODEX_MAINNET = {
+  id: SODEX_NETWORKS.mainnet.chainId,
+  name: SODEX_NETWORKS.mainnet.displayName,
+  nativeCurrency: {
+    name: "SOSO",
+    symbol: "SOSO",
+    decimals: 18,
+  },
+  rpcUrls: {
+    default: { http: [SODEX_NETWORKS.mainnet.rpcUrl] },
+    public: { http: [SODEX_NETWORKS.mainnet.rpcUrl] },
+  },
+  blockExplorers: {
+    default: { name: "SoDEX Explorer", url: SODEX_NETWORKS.mainnet.explorerUrl },
+  },
+  testnet: false,
+} as const;
+
 function createWagmiConfig() {
   return createConfig({
-    chains: [mainnet, SODEX_TESTNET],
+    chains: [mainnet, SODEX_TESTNET, SODEX_MAINNET],
     connectors: [injected({ shimDisconnect: true })],
     transports: {
       [mainnet.id]: http(),
       [SODEX_TESTNET.id]: http(),
+      [SODEX_MAINNET.id]: http(),
     },
   });
 }

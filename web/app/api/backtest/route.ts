@@ -1,3 +1,4 @@
+import "@/lib/config-server";
 import { NextResponse } from "next/server";
 import { getAdapter, initDex } from "@/lib/dex";
 import { Backtester } from "@/lib/engine/backtest.js";
@@ -84,11 +85,11 @@ export async function POST(request: Request) {
     if (!candles) {
       try {
         candles = await adapter.getCandles(symbol, "1h", 1000);
-        dataSourceLabel = "SoDEX testnet";
+        dataSourceLabel = "SoDEX testnet 1h";
       } catch {
-        const { generateSyntheticCandles } = await import("@/lib/dex/sodex-adapter");
-        candles = generateSyntheticCandles(symbol, 1000);
-        dataSourceLabel = "Synthetic (fallback)";
+        // Only use SoSoValue as fallback — no more synthetic candles
+        candles = await fetchSoSoValueKlines(symbol, 42);
+        dataSourceLabel = "SoSoValue 1d (expanded to 1h)";
       }
     }
 

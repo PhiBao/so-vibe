@@ -1,6 +1,8 @@
+import "@/lib/config-server";
 import { NextResponse } from "next/server";
 import { defaultAuditor } from "@/lib/security";
 import { getAdapter, initDex } from "@/lib/dex";
+import { sanitizeError } from "@/lib/api-error";
 
 export async function POST(request: Request) {
   const body = await request.json();
@@ -42,16 +44,30 @@ export async function POST(request: Request) {
       price: parseFloat(price),
     });
 
+    // Build SL/TP brackets so the client can sign and attach them after the main order.
+    const bracketActions: any[] = [];
+    const closeSide = side === "long" || side === "buy" ? "short" : "long";
+    if (stopLoss) {
+      bracketActions.push(
+        await adapter.buildStopLoss(symbol, closeSide as any, parseFloat(stopLoss), { wallet, size: parseFloat(size) })
+      );
+    }
+    if (takeProfit) {
+      bracketActions.push(
+        await adapter.buildTakeProfit(symbol, closeSide as any, parseFloat(takeProfit), { wallet, size: parseFloat(size) })
+      );
+    }
+
     return NextResponse.json({
       success: true,
       action,
+      bracketActions,
       signalId,
       stopLoss,
       takeProfit,
       message: `Sign transaction to submit market order (${side} ${size} ${symbol})`,
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return NextResponse.json({ error: `Order build failed: ${message}` }, { status: 500 });
+    return NextResponse.json({ error: sanitizeError(err) }, { status: 500 });
   }
 }

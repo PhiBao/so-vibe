@@ -424,3 +424,90 @@ export function synthesizeSignals(strategies, currentPrice, options = {}) {
     details, longVotes: longCount, shortVotes: shortCount, hasConsensus, holdReason, vibeScore,
   };
 }
+
+// ─── Multi-Timeframe Synthesis ─────────────────────────────
+// Runs strategies on 4 timeframes and weights higher TFs more heavily.
+// 15m: 1x | 1h: 2x | 4h: 3x | 1d: 4x
+// TF consensus bonus: +0.10 when 3+ TFs agree on direction
+
+const TF_INTERVALS = ["15m", "1h", "4h", "1d"];
+const TF_WEIGHTS = { "15m": 1, "1h": 2, "4h": 3, "1d": 4 };
+
+export function synthesizeMultiTF(tfResults, currentPrice, options = {}) {
+  // tfResults: { "15m": signalResult, "1h": signalResult, "4h": signalResult, "1d": signalResult }
+  const maxLeverage = options.maxLeverage || 1;
+
+  let weightedSignal = 0;
+  let totalWeight = 0;
+  const tfVotes = [];
+  const allDetails = [];
+  let bestAction = "hold";
+  let bestSignal = 0;
+
+  for (const tf of TF_INTERVALS) {
+    const result = tfResults[tf];
+    if (!result) continue;
+
+    const w = TF_WEIGHTS[tf] || 1;
+    weightedSignal += result.signal * w;
+    totalWeight += w;
+    tfVotes.push({ tf, signal: result.signal, action: result.action, confidence: result.confidence, weight: w });
+    if (result.details) allDetails.push(...result.details.map((d) => ({ ...d, timeframe: tf })));
+
+    if (result.action !== "hold") {
+      bestAction = result.action;
+      bestSignal = result.signal;
+    }
+  }
+
+  if (totalWeight === 0) {
+    return synthesizeSignals([], currentPrice, options); // fallback to empty
+  }
+
+  const finalSignal = weightedSignal / totalWeight;
+
+  // TF consensus bonus
+  const tfLongs = tfVotes.filter((v) => v.signal > 0.15).length;
+  const tfShorts = tfVotes.filter((v) => v.signal < -0.15).length;
+  const tfAgreement = tfLongs >= 3 || tfShorts >= 3;
+  const tfBonus = tfAgreement ? 0.10 : 0;
+
+  const avgConfidence = tfVotes.reduce((s, v) => s + v.confidence, 0) / tfVotes.length;
+  const adjustedConfidence = Math.min(1, avgConfidence + tfBonus);
+
+  let action = "hold";
+  if (finalSignal >= 0.25 && adjustedConfidence >= 0.5) action = "long";
+  else if (finalSignal <= -0.25 && adjustedConfidence >= 0.5) action = "short";
+
+  // Aggregate SL/TP from best TF result
+  const bestTF = tfVotes.find((v) => v.action !== "hold") || tfVotes[0];
+  const bestTfResult = tfResults[bestTF?.tf || "1h"];
+  const stopLoss = bestTfResult?.stopLoss || null;
+  const takeProfit = bestTfResult?.takeProfit || null;
+
+  // Vibe Score from the most weighted TF (1h as base)
+  const baseResult = tfResults["1h"] || tfResults["4h"] || tfResults["1d"] || tfResults["15m"];
+  const vibeScore = baseResult?.vibeScore || { vibe: finalSignal, confidence: avgConfidence, fullConsensus: tfAgreement, breakdown: {} };
+
+  return {
+    action,
+    signal: Math.max(-1, Math.min(1, finalSignal)),
+    confidence: adjustedConfidence,
+    entryPrice: currentPrice,
+    stopLoss,
+    takeProfit,
+    leverage: maxLeverage,
+    details: allDetails.map((d) => ({
+      name: d.timeframe ? `${d.name}@${d.timeframe}` : d.name,
+      signal: d.signal,
+      confidence: d.confidence,
+    })),
+    longVotes: tfLongs,
+    shortVotes: tfShorts,
+    hasConsensus: tfAgreement,
+    holdReason: action === "hold" ? (Math.abs(finalSignal) < 0.25 ? "weak_signal" : "low_confidence") : "",
+    tfs: tfVotes,
+    tfAgreement,
+    vibeScore,
+  };
+}

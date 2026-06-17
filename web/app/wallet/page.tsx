@@ -1,5 +1,6 @@
 "use client";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import Link from "next/link";
 import { useAccount } from "wagmi";
 import { useSodexTx } from "@/lib/use-sodex-tx";
 import { useToast } from "@/components/ToastProvider";
@@ -56,6 +57,16 @@ export default function WalletPage() {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const addr = params.get("address");
+    if (addr) {
+      setSearchAddress(addr);
+      fetchProfile(addr);
+    }
+  }, [fetchProfile]);
 
   const handleLookup = () => {
     const addr = searchAddress.trim();
@@ -120,9 +131,14 @@ export default function WalletPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-in">
-      <div>
-        <h1 className="text-xl font-bold text-[var(--cyan)] glow-cyan tracking-wider">WALLET_ANALYZER</h1>
-        <p className="text-[12px] text-[var(--text-secondary)] font-mono mt-1">Analyze any SoDEX wallet &amp; copy trades with one click</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-[var(--cyan)] glow-cyan tracking-wider">WALLET_ANALYZER</h1>
+          <p className="text-[12px] text-[var(--text-secondary)] font-mono mt-1">Analyze any SoDEX wallet &amp; copy trades with one click</p>
+        </div>
+        <Link href="/wallet/leaderboard" className="btn-terminal text-[11px] py-1.5 px-3">
+          [ LEADERBOARD ]
+        </Link>
       </div>
 
       {/* Search bar */}

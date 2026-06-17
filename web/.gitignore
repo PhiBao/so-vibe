@@ -42,6 +42,8 @@ yarn-error.log*
 # runtime data
 /data/
 *.jsonl
+.runtime-config.json
+.pnl-trades.json
 
 # vercel
 .vercel

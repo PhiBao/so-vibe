@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { useAccount, useConnect, useDisconnect } from "wagmi";
 import { useToast } from "@/components/ToastProvider";
 import { useSodexTx } from "@/lib/use-sodex-tx";
+import NetworkSwitch, { useNetwork } from "@/components/NetworkSwitch";
+import { getNetworkConfig } from "@/lib/config";
 
 const NAV = [
   { href: "/", label: "dashboard", icon: "◈" },
@@ -14,36 +16,38 @@ const NAV = [
   { href: "/wallet", label: "wallet", icon: "◆" },
   { href: "/backtest", label: "backtest", icon: "◊" },
   { href: "/news", label: "news", icon: "◉" },
+  { href: "/settings", label: "settings", icon: "⚙" },
 ];
 
 function hasMetaMask(): boolean {
   return typeof window !== "undefined" && !!(window as any).ethereum?.isMetaMask;
 }
 
-const SODEX_CHAIN_ID = 138565;
-
 function NetworkChecker() {
   const { chainId, isConnected } = useAccount();
   const [switching, setSwitching] = useState(false);
+  const { network } = useNetwork();
+  const expectedChainId = getNetworkConfig(network).chainId;
 
   if (!isConnected) return null;
-  if (chainId === SODEX_CHAIN_ID) return null;
+  if (chainId === expectedChainId) return null;
 
   const handleSwitch = async () => {
     setSwitching(true);
     try {
       const ethereum = (window as any).ethereum;
       if (!ethereum) return;
+      const cfg = getNetworkConfig(network);
       const sodexChain = {
-        chainId: "0x21d45",
-        chainName: "SoDEX Testnet",
+        chainId: cfg.chainHex,
+        chainName: cfg.displayName,
         nativeCurrency: {
           name: "SOSO",
           symbol: "SOSO",
           decimals: 18,
         },
-        rpcUrls: [process.env.NEXT_PUBLIC_RPC_URL || "https://testnet-v2.valuechain.xyz/"],
-        blockExplorerUrls: ["https://testnet.sodex.com/"],
+        rpcUrls: [cfg.rpcUrl],
+        blockExplorerUrls: [cfg.explorerUrl],
       };
       try {
         await ethereum.request({
@@ -267,6 +271,9 @@ function WalletBalance() {
   const [mounted, setMounted] = useState(false);
   const [balance, setBalance] = useState<{ spot: number; perp: number; accountID: number | null; positions: number } | null>(null);
   const [modal, setModal] = useState<{ open: boolean; mode: "deposit" | "withdraw" }>({ open: false, mode: "deposit" });
+  const { network } = useNetwork();
+  const cfg = getNetworkConfig(network);
+  const showFaucet = cfg.testnet && cfg.faucetUrl;
 
   useEffect(() => {
     setMounted(true);
@@ -338,15 +345,17 @@ function WalletBalance() {
           >
             [-]
           </button>
-          <a
-            href="https://testnet.sodex.com/faucet"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex-1 btn-terminal text-[9px] py-1 px-0.5 flex items-center justify-center text-center no-underline"
-            title="SoDEX Faucet"
-          >
-            FAUCET
-          </a>
+          {showFaucet && (
+            <a
+              href={cfg.faucetUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex-1 btn-terminal text-[9px] py-1 px-0.5 flex items-center justify-center text-center no-underline"
+              title="SoDEX Faucet"
+            >
+              FAUCET
+            </a>
+          )}
         </div>
 
         {/* Balances */}
@@ -479,7 +488,7 @@ export default function TerminalLayout({ children }: { children: React.ReactNode
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-2 text-[10px]">
                 <span className="text-[var(--text-secondary)]">NET:</span>
-                <span className="text-[var(--green)]">TESTNET</span>
+                <NetworkSwitch />
               </div>
               <div className="h-4 w-px bg-[var(--border)]" />
               <div className="flex items-center gap-2 text-[10px]">

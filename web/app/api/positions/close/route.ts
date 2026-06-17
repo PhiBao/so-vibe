@@ -1,3 +1,4 @@
+import "@/lib/config-server";
 import { NextResponse } from "next/server";
 import { defaultAuditor } from "@/lib/security";
 import { getAdapter, initDex } from "@/lib/dex";

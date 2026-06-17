@@ -1,10 +1,69 @@
-# Changelog — SoVibe (Wave 2)
-
-May 2026 · SoSoValue Buildathon · SoDEX testnet · DGrid AI · SoSoValue API
+# Changelog — SoVibe
 
 ---
 
-## New Modules (10 files)
+## Wave 3 — 2026-06-17 · Mainnet, Encrypted Bot Keys, Leaderboard
+
+### Added
+- **Mainnet / testnet network switch**
+  - Runtime network config persisted in `web/.runtime-config.json`
+  - Header dropdown selects TESTNET or MAINNET; no auto-switch, no modal
+  - Server API routes read the runtime config at import time
+  - Wagmi registers both SoDEX testnet (138565) and mainnet (286623) chains
+- **Encrypted auto-trading bot keys**
+  - `lib/encrypted-store.ts` uses PBKDF2 + AES-GCM with a user password
+  - Private key stored encrypted in `localStorage`; plaintext kept in memory only while unlocked
+  - `/settings` page for saving, unlocking, locking, and clearing bot keys
+  - `lib/bot-signer-client.ts` signs EIP712 orders locally in the browser
+  - `/api/bot/auto-execute` returns unsigned actions for client-side signing
+  - `/api/bot/register-key` builds the on-chain `addAPIKey` registration action
+- **Copy-trading leaderboard**
+  - `/wallet/leaderboard` ranks curated SoDEX wallets by Sharpe, return, win rate, profit factor, or trade count
+  - `LEADERBOARD_WALLETS` env var seeds the list
+  - Each row links directly to `/wallet?address=...` for analyze & copy
+- **Wallet profile reuse**
+  - `lib/wallet-profile.ts` shares analytics logic between profile and leaderboard APIs
+- **Multi-timeframe analysis**
+  - Bot cycle aggregates signals across 15m, 1h, 4h, and 1d timeframes
+  - Weighted consensus (15m=1x, 1h=2x, 4h=3x, 1d=4x) with bonus when 3+ TFs agree
+- **Robust backtest + live PnL**
+  - Backtest engine uses real SoDEX 1h candles or SoSoValue daily klines
+  - File-based PnL persistence (`lib/engine/pnl-tracker.ts`)
+  - Closed trades recorded on execution; per-strategy breakdown
+- **Strategy performance scorecard**
+  - `/bots` displays live Net PnL, Win Rate, Profit Factor, Sharpe, Max Drawdown, Avg Win/Loss
+  - Per-strategy trade counts, win rates, and realized PnL
+- **Settings page**
+  - `/settings` configures network and encrypted bot keys with step-by-step UX
+- **Security hardening**
+  - No server-side bot signer; all bot signing happens client-side with encrypted local keys
+  - Added `lib/api-error.ts` sanitizer; 500 errors return generic messages
+  - Sanitized error responses in `/api/bot/auto-execute`, `/api/bot/execute`, `/api/trade`, `/api/wallet/profile`
+  - Removed production debug logs in `use-sodex-tx.ts`
+  - Documented `NEXT_PUBLIC_RPC_URL` credential risk
+
+### Fixed
+- SoDEX REST v1 endpoint paths:
+  - Perps orders: `/api/v1/perps/trade/orders`
+  - Perps transfers: `/api/v1/perps/accounts/transfers`
+  - Spot transfers: `/api/v1/spot/accounts/transfers`
+- SoDEX request body format: params object only; no `type` wrapper
+- Master-wallet signed requests omit `X-API-Key`; API-key signed requests include `X-API-Key: <name>`
+- SoDEX EIP712 domain now follows the action's own domain (`futures` or `spot`)
+- Mainnet chain ID corrected to `286623` (`0x45f9f`)
+- Mainnet RPC and explorer URLs corrected
+- PnL tracker uses file-based persistence
+
+### Changed
+- `AGENTS.md` updated with Wave 3 architecture, security rules, and roadmap status
+- `.env.example` cleaned up; removed unused `SODEX_API_URL` and `BOT_PRIVATE_KEY`
+- `.gitignore` ignores `.runtime-config.json` and `.pnl-trades.json`
+
+---
+
+## Wave 2 — May 2026 · SoSoValue Buildathon · SoDEX testnet · DGrid AI · SoSoValue API
+
+### New Modules (10 files)
 
 lib/engine/llm-agent.ts — DGrid AI client wrapping OpenAI SDK pointed at api.dgrid.ai/v1. Three functions: analyzeNewsSentiment (LLM scores news headlines, extracts key narratives), classifyMarketRegime (classifies market as trending/ranging/volatile, suggests strategy weights), explainSignal (generates human-readable reasoning + risk factors). Uses gpt-4o-mini. All functions fall back gracefully when DGRID_API_KEY unset.
 

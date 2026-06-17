@@ -240,6 +240,12 @@ export interface DexAdapter {
     amount: number,
     options?: { wallet?: string; accountID?: number }
   ): Promise<UnsignedAction>;
+
+  buildAddAPIKey(
+    publicKey: string,
+    name: string,
+    options?: { wallet?: string; accountID?: number; keyType?: number; expiresAt?: number }
+  ): Promise<UnsignedAction>;
 }
 
 export interface DexConfig {

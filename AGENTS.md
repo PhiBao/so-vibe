@@ -1,10 +1,12 @@
-# SoVibe — Agent Guide (Wave 2)
+# SoVibe — Agent Guide (Wave 3)
 
 ## Project Overview
 
-SoVibe is an **AI-augmented perpetual trading terminal** for the SoSoValue ecosystem. It runs a **7-strategy swarm** (5 technical + DGrid AI sentiment + ETF flow analysis) combined with real-time SoSoValue data to generate actionable, explained trading signals on **SoDEX testnet**.
+SoVibe is an **AI-augmented perpetual trading terminal** for the SoSoValue ecosystem. It runs a **7-strategy swarm** (5 technical + DGrid AI sentiment + ETF flow analysis) combined with real-time SoSoValue data to generate actionable, explained trading signals on **SoDEX testnet or mainnet**.
 
-Every signal includes LLM reasoning. Every signal can be signed and submitted on-chain via MetaMask.
+Every signal includes LLM reasoning. Every signal can be signed and submitted on-chain via MetaMask. Wave 3 adds encrypted local auto-trading bot keys, a copy-trading leaderboard, mainnet support, and hardened security defaults.
+
+> For demo and talking points see `DEMO.md`. For release notes see `CHANGELOG.md`.
 
 ## Stack
 
@@ -12,8 +14,8 @@ Every signal includes LLM reasoning. Every signal can be signed and submitted on
 - **AI/LLM**: DGrid AI (OpenAI-compatible gateway, `gpt-4o-mini`) for sentiment, regime classification, signal reasoning
 - **Data**: SoSoValue API (9 modules: news, ETF, market snapshots, macro events, indices, crypto stocks, fundraising, analysis charts, currency data)
 - **Web3**: Wagmi + Viem, MetaMask (`injected()` only)
-- **DEX**: SoDEX testnet (EVM chainId 138565) via native adapter
-- **Security**: Custom `SecurityAuditor` with rate limiting, circuit breakers, duplicate detection
+- **DEX**: SoDEX testnet (chainId 138565) and mainnet (chainId 286623) via native adapter
+- **Security**: Custom `SecurityAuditor` with rate limiting, circuit breakers, duplicate detection; encrypted local bot-key storage
 
 ## Directory Structure
 
@@ -21,26 +23,30 @@ Every signal includes LLM reasoning. Every signal can be signed and submitted on
 web/
 ├── app/
 │   ├── api/
-│   │   ├── bot/              # Bot cycle, execute, signals, status, toggle
+│   │   ├── bot/              # Bot cycle, auto-execute, execute, signals, status, toggle, PnL
+│   │   ├── config/           # Runtime network config persistence
 │   │   ├── market/           # Market data (price, orderbook)
 │   │   ├── markets/          # All market limits
 │   │   ├── news/             # Enriched SoSoValue news (symbol-filtered, tags, categories)
 │   │   ├── positions/        # Close position, SL/TP builder
 │   │   ├── status/           # System status
 │   │   ├── trade/            # Manual trade order builder
-│   │   ├── wallet/           # Balance, deposit, withdraw
+│   │   ├── wallet/           # Balance, deposit, withdraw, profile, copy, leaderboard
 │   │   └── backtest/         # Backtest with SoDEX + SoSoValue dual data source
 │   ├── backtest/             # Backtest UI
 │   ├── bots/                 # Bot control + signal execution + strategy builder
 │   ├── news/                 # News feed with symbol filter, AI sentiment badges
 │   ├── positions/            # Position monitor
+│   ├── settings/             # Network + encrypted bot key settings
 │   ├── trade/                # Manual trade execution
+│   ├── wallet/               # Wallet analyzer + leaderboard
 │   ├── globals.css           # Cyberpunk design system
 │   ├── layout.tsx            # Terminal layout wrapper
 │   ├── page.tsx              # Dashboard with intelligence overlay
 │   └── providers.tsx         # Wallet context
 ├── components/
 │   ├── TerminalLayout.tsx    # Sidebar + nav + wallet panel
+│   ├── NetworkSwitch.tsx     # TESTNET/MAINNET dropdown
 │   ├── ToastProvider.tsx     # Toast notification system
 │   └── WalletProvider.tsx    # Wagmi provider
 ├── lib/
@@ -55,6 +61,7 @@ web/
 │   │   ├── funding.js        # Funding rate analysis
 │   │   ├── market.js         # Market data wrapper
 │   │   ├── llm-agent.ts      # DGrid AI client (news sentiment, regime, reasoning)
+│   │   ├── pnl-tracker.ts    # File-based closed-trade PnL persistence
 │   │   └── strategies/
 │   │       └── etf-flow.js   # ETF flow strategy (8th swarm member)
 │   ├── sosovalue/
@@ -66,7 +73,14 @@ web/
 │   ├── signal-store.ts       # Server-side signal persistence
 │   ├── use-sodex-tx.ts       # EIP712 signing hook (perps + spot domains)
 │   ├── security.ts           # Security auditor
-│   └── data-store.ts         # State storage
+│   ├── data-store.ts         # State storage
+│   ├── config.ts             # Client-safe network config
+│   ├── config-server.ts      # Server-side runtime config loader
+│   ├── api-error.ts          # API error sanitizer
+│   ├── encrypted-store.ts    # Password-encrypted browser keystore for bot keys
+│   ├── bot-signer-client.ts  # Client-side EIP712 bot signer
+│   ├── leaderboard-wallets.ts# Curated wallet list for leaderboard
+│   └── wallet-profile.ts     # Shared wallet analytics builder
 ```
 
 ## Quick Commands
@@ -78,7 +92,7 @@ cd web && npm run build   # production build
 
 ## Environment
 
-Create `web/.env` (or `.env.local`):
+Create `web/.env` (or `.env.local`) for defaults, or configure at runtime via `/settings`:
 
 ```bash
 DEX_PROVIDER=sodex
@@ -86,7 +100,12 @@ DEX_TESTNET=true
 SOSO_API_KEY=your-sosovalue-api-key
 DGRID_API_KEY=your-dgrid-api-key
 NEXT_PUBLIC_RPC_URL=https://testnet-v2.valuechain.xyz/
+
+# Optional: seed the copy-trading leaderboard
+# LEADERBOARD_WALLETS=0x...,0x...
 ```
+
+Runtime network choice is persisted in `web/.runtime-config.json` and selected via the header dropdown. Bot keys are configured by the user in the browser, encrypted with a user password, and stored in `localStorage`; the plaintext private key is kept in memory only while unlocked.
 
 ## The 7-Strategy Swarm (Wave 2)
 
@@ -121,10 +140,11 @@ All trading logic routes through `lib/dex/index.ts` (`getAdapter()` / `initDex()
 
 The SoDEX adapter handles:
 - **EIP712 signing** with `eth_signTypedData_v4`
-- **Domain separation**: perps uses `name: "futures"`, spot uses `name: "spot"` (both chainId 138565)
+- **Domain separation**: perps uses `name: "futures"`, spot uses `name: "spot"` (chainId 138565 on testnet, 286623 on mainnet)
 - **Signature prefix**: `0x01` for perps orders, `0x02` for spot orders
 - **Field-order sensitive hashing**: Go server re-marshals JSON; fields must match struct order exactly
 - **Trailing zero stripping**: `formatQuantity()` strips trailing zeros
+- **REST paths**: perps orders use `/api/v1/perps/trade/orders`; spot transfers use `/api/v1/spot/accounts/transfers`; perps transfers use `/api/v1/perps/accounts/transfers`
 
 ## DGrid AI Integration
 
@@ -176,20 +196,25 @@ Metrics: Total Return, Sharpe, Sortino, Max Drawdown, Win Rate, Profit Factor, A
 - [x] Duplicate order detection
 - [x] Price anomaly detection
 - [x] EIP712 domain validation
+- [x] Bot private keys encrypted at rest (PBKDF2 + AES-GCM)
+- [x] Server-side bot signer removed; no `BOT_PRIVATE_KEY` in env
+- [x] Internal API errors sanitized before returning to client
 
 ## Critical Rules
 
 1. **Never change field order** in SoDEX request bodies — hash verification will fail.
 2. **Always stagger nonces** by ≥100ms when sending multiple signed instructions (SL/TP batching).
-3. **Spot↔perp transfers**: spot→perp uses `/api/v1/spot/exchange` (`name: "spot"` domain, `type: 3`); perp→spot uses `/api/v1/perps/exchange` (`name: "futures"` domain, `type: 5`).
-4. **Quantity precision**: BTC-USD `5`, ETH-USD `4`, SOL-USD `3` — use `formatQuantity(symbol, qty)`.
-5. **LLM calls are additive, not essential** — all LLM functions have fallback paths. The bot works without DGRID_API_KEY (falls back to keyword sentiment).
-6. **No WalletConnect** — MetaMask (`injected()`) only.
+3. **Spot↔perp transfers**: spot→perp uses `/api/v1/spot/accounts/transfers` (`name: "spot"` domain, `type: 3`); perp→spot uses `/api/v1/perps/accounts/transfers` (`name: "futures"` domain, `type: 5`).
+4. **Master-wallet signed requests omit `X-API-Key`**; API-key signed requests include `X-API-Key: <api-key-name>`. The request body is the params object only (no `type` wrapper).
+5. **Quantity precision**: BTC-USD `5`, ETH-USD `4`, SOL-USD `3` — use `formatQuantity(symbol, qty)`.
+6. **LLM calls are additive, not essential** — all LLM functions have fallback paths. The bot works without DGRID_API_KEY (falls back to keyword sentiment).
+7. **Do not put credentials in `NEXT_PUBLIC_RPC_URL`** — it is inlined into the client bundle. Use a credential-free public RPC or a server-side relay.
+8. **No WalletConnect** — MetaMask (`injected()`) only.
 
 ## Wave 3 Roadmap
 
-- Copy-trading leaderboard (on-chain SoDEX wallet discovery)
-- One-click trade mirroring with proportional position sizing
-- Strategy config cards — shareable URLs for bot settings
-- Wallet profiles with PnL/win rate analytics
-- Referral program for growth
+- [x] Copy-trading leaderboard (on-chain SoDEX wallet discovery)
+- [x] One-click trade mirroring with proportional position sizing
+- [x] Strategy config cards — shareable URLs for bot settings
+- [x] Wallet profiles with PnL/win rate analytics
+- [ ] Referral program for growth

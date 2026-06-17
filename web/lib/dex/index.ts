@@ -4,6 +4,7 @@
 
 import type { DexAdapter, DexConfig } from "./types";
 import { sodexAdapter } from "./sodex-adapter";
+import { getNetworkConfig, isTestnet } from "@/lib/config";
 
 const registry: Record<string, DexAdapter> = {
   sodex: sodexAdapter,
@@ -12,11 +13,12 @@ const registry: Record<string, DexAdapter> = {
 let activeAdapter: DexAdapter | null = null;
 
 export function getDexConfig(): DexConfig {
+  const cfg = getNetworkConfig();
   return {
     provider: process.env.DEX_PROVIDER || "sodex",
-    apiUrl: process.env.SODEX_API_URL || "https://testnet-gw.sodex.dev/api/v1/perps",
-    testnet: true,
-    chainId: 138565,
+    apiUrl: `${cfg.gwBase}/api/v1/perps`,
+    testnet: cfg.testnet,
+    chainId: cfg.chainId,
   };
 }
 

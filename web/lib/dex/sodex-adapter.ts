@@ -19,21 +19,24 @@ import type {
   EIP712Domain,
   EIP712Message,
 } from "./types";
+import { getCurrentChainId, getNetworkConfig } from "@/lib/config";
 
 // ─── Config ────────────────────────────────────────────────
 
-const GW_BASE = "https://testnet-gw.sodex.dev";
-const PERPS_BASE = `${GW_BASE}/api/v1/perps`;
-const SPOT_BASE = `${GW_BASE}/api/v1/spot`;
-const FUTURES_BASE = `${GW_BASE}/futures/fapi/market/v1/public`;
-const QUOTATION_BASE = `${GW_BASE}/pro/p/quotation`;
-const TESTNET_CHAIN_ID = 138565;
-const MAINNET_CHAIN_ID = 286623;
-
 function getChainId() {
-  return process.env.DEX_TESTNET === "true" || process.env.DEX_PROVIDER === "sodex"
-    ? TESTNET_CHAIN_ID
-    : MAINNET_CHAIN_ID;
+  return getCurrentChainId();
+}
+
+function getGwBase() {
+  return getNetworkConfig().gwBase;
+}
+
+function getPerpsBase() {
+  return `${getGwBase()}/api/v1/perps`;
+}
+
+function getSpotBase() {
+  return `${getGwBase()}/api/v1/spot`;
 }
 
 // ─── HTTP Helpers ──────────────────────────────────────────
@@ -70,7 +73,7 @@ async function getAccountID(walletAddress: string): Promise<number> {
   const cached = accountCache.get(walletAddress.toLowerCase());
   if (cached !== undefined) return cached;
 
-  const data = await sodexGet(`${PERPS_BASE}/accounts/${walletAddress}/state`);
+  const data = await sodexGet(`${getPerpsBase()}/accounts/${walletAddress}/state`);
   const accountID = data?.data?.aid ?? data?.data?.uid ?? 0;
   if (accountID) {
     accountCache.set(walletAddress.toLowerCase(), accountID);
@@ -188,7 +191,7 @@ function closeSide(side: OrderSide): number {
 export const sodexAdapter: DexAdapter = {
   name: "sodex",
   chain: "evm",
-  baseUrl: PERPS_BASE,
+  baseUrl: getPerpsBase(),
 
   async init() {
     // Verify markets load — throws if API is down
@@ -203,7 +206,7 @@ export const sodexAdapter: DexAdapter = {
       return marketCache;
     }
 
-    const data = await sodexGet(`${PERPS_BASE}/markets/symbols`);
+    const data = await sodexGet(`${getPerpsBase()}/markets/symbols`);
     const markets = (data?.data || []).map((m: any): MarketInfo => ({
       symbol: m.name || m.symbol,
       symbolID: m.id || 0,
@@ -232,7 +235,7 @@ export const sodexAdapter: DexAdapter = {
   },
 
   async getCandles(symbol, interval, limit) {
-    const data = await sodexGet(`${PERPS_BASE}/markets/${symbol}/klines?interval=${interval}&limit=${limit}`);
+    const data = await sodexGet(`${getPerpsBase()}/markets/${symbol}/klines?interval=${interval}&limit=${limit}`);
     const raw = data?.data || [];
     if (!raw.length) {
       throw new Error(`SoDEX klines empty for ${symbol}`);
@@ -248,7 +251,7 @@ export const sodexAdapter: DexAdapter = {
   },
 
   async getOrderbook(symbol) {
-    const data = await sodexGet(`${PERPS_BASE}/markets/${symbol}/orderbook?limit=20`);
+    const data = await sodexGet(`${getPerpsBase()}/markets/${symbol}/orderbook?limit=20`);
     const bids = (data?.data?.bids || []).map((b: any[]) => ({ price: parseFloat(b[0]), size: parseFloat(b[1]) }));
     const asks = (data?.data?.asks || []).map((a: any[]) => ({ price: parseFloat(a[0]), size: parseFloat(a[1]) }));
     const bestBid = bids[0]?.price || 0;
@@ -258,11 +261,11 @@ export const sodexAdapter: DexAdapter = {
   },
 
   async getFills(symbol) {
-    return sodexGet(`${PERPS_BASE}/markets/${symbol}/trades?limit=50`);
+    return sodexGet(`${getPerpsBase()}/markets/${symbol}/trades?limit=50`);
   },
 
   async getFundingRate(symbol) {
-    const data = await sodexGet(`${PERPS_BASE}/markets/tickers?symbol=${symbol}`);
+    const data = await sodexGet(`${getPerpsBase()}/markets/tickers?symbol=${symbol}`);
     const ticker = data?.data?.[0];
     if (!ticker) throw new Error(`No funding rate data for ${symbol}`);
     return {
@@ -272,7 +275,7 @@ export const sodexAdapter: DexAdapter = {
   },
 
   async getExchangeInfo() {
-    return { name: "SoDEX", version: "1.0.0", chainId: getChainId(), env: "testnet" };
+    return { name: "SoDEX", version: "1.0.0", chainId: getChainId(), env: getNetworkConfig().name };
   },
 
   // ─── Trader State ──────────────────────────────────────────
@@ -280,8 +283,8 @@ export const sodexAdapter: DexAdapter = {
   async getTraderState(walletAddress) {
     // Fetch perps state and spot balances in parallel
     const [stateRes, spotRes] = await Promise.all([
-      sodexGet(`${PERPS_BASE}/accounts/${walletAddress}/state`),
-      sodexGet(`${SPOT_BASE}/accounts/${walletAddress}/balances`).catch(() => null),
+      sodexGet(`${getPerpsBase()}/accounts/${walletAddress}/state`),
+      sodexGet(`${getSpotBase()}/accounts/${walletAddress}/balances`).catch(() => null),
     ]);
     const state = stateRes?.data;
 
@@ -319,7 +322,7 @@ export const sodexAdapter: DexAdapter = {
   // ─── Price Helpers ─────────────────────────────────────────
 
   async getCurrentPrice(symbol) {
-    const data = await sodexGet(`${PERPS_BASE}/markets/tickers?symbol=${symbol}`);
+    const data = await sodexGet(`${getPerpsBase()}/markets/tickers?symbol=${symbol}`);
     const ticker = data?.data?.[0];
     const price = parseFloat(ticker?.lastPx || 0);
     if (!price) throw new Error(`No price data for ${symbol}`);
@@ -372,7 +375,7 @@ export const sodexAdapter: DexAdapter = {
       params: { accountID, symbolID, orders: [order] },
     };
 
-    const action = buildUnsignedAction(payload, "/exchange");
+    const action = buildUnsignedAction(payload, "/api/v1/perps/trade/orders");
     action.message.nonce = nonce;
     return action;
   },
@@ -412,7 +415,7 @@ export const sodexAdapter: DexAdapter = {
       },
     };
 
-    const action = buildUnsignedAction(payload, "/exchange");
+    const action = buildUnsignedAction(payload, "/api/v1/perps/trade/orders");
     action.message.nonce = nonce;
     return action;
   },
@@ -451,7 +454,7 @@ export const sodexAdapter: DexAdapter = {
       params: { accountID, symbolID, orders: [order] },
     };
 
-    const action = buildUnsignedAction(payload, "/exchange");
+    const action = buildUnsignedAction(payload, "/api/v1/perps/trade/orders");
     action.message.nonce = nonce;
     return action;
   },
@@ -490,7 +493,7 @@ export const sodexAdapter: DexAdapter = {
       params: { accountID, symbolID, orders: [order] },
     };
 
-    const action = buildUnsignedAction(payload, "/exchange");
+    const action = buildUnsignedAction(payload, "/api/v1/perps/trade/orders");
     action.message.nonce = nonce;
     return action;
   },
@@ -526,7 +529,7 @@ export const sodexAdapter: DexAdapter = {
       },
     };
 
-    const action = buildUnsignedAction(payload, "/exchange");
+    const action = buildUnsignedAction(payload, "/api/v1/perps/trade/orders");
     action.message.nonce = nonce;
     return action;
   },
@@ -547,7 +550,7 @@ export const sodexAdapter: DexAdapter = {
       },
     };
 
-    const action = buildUnsignedAction(payload, "/exchange");
+    const action = buildUnsignedAction(payload, "/api/v1/perps/trade/margin");
     action.message.nonce = nonce;
     return action;
   },
@@ -560,7 +563,7 @@ export const sodexAdapter: DexAdapter = {
 
     if (options?.wallet && !spotAccountID) {
       try {
-        const spotState = await sodexGet(`${SPOT_BASE}/accounts/${options.wallet}/state`);
+        const spotState = await sodexGet(`${getSpotBase()}/accounts/${options.wallet}/state`);
         spotAccountID = spotState?.data?.aid ?? 0;
       } catch {}
     }
@@ -589,7 +592,7 @@ export const sodexAdapter: DexAdapter = {
       payloadHash,
       domain,
       message,
-      endpoint: "/api/v1/spot/exchange",
+      endpoint: "/api/v1/spot/accounts/transfers",
       params: payload.params,
     };
   },
@@ -622,7 +625,45 @@ export const sodexAdapter: DexAdapter = {
       payloadHash,
       domain,
       message,
-      endpoint: "/exchange",
+      endpoint: "/api/v1/perps/accounts/transfers",
+      params: payload.params,
+    };
+  },
+
+  async buildAddAPIKey(publicKey: string, name: string, options?: { wallet?: string; accountID?: number; keyType?: number; expiresAt?: number }) {
+    const wallet = options?.wallet;
+    let accountID = options?.accountID ?? 0;
+    const nonce = wallet ? getNonce(wallet) : Date.now();
+
+    if (wallet && !accountID) {
+      try {
+        const spotState = await sodexGet(`${getSpotBase()}/accounts/${wallet}/state`);
+        accountID = spotState?.data?.aid ?? 0;
+      } catch {}
+    }
+
+    const payload = {
+      type: "addAPIKey",
+      params: {
+        chainID: String(getChainId()),
+        accountID,
+        name,
+        keyType: options?.keyType ?? 1,
+        publicKey,
+        expiresAt: options?.expiresAt ?? 0,
+      },
+    };
+
+    const payloadHash = computePayloadHash(payload);
+    const domain = getSpotDomain();
+    const message: EIP712Message = { payloadHash, nonce };
+
+    return {
+      payload: payload as any,
+      payloadHash,
+      domain,
+      message,
+      endpoint: "/api/v1/spot/accounts/apiKeys",
       params: payload.params,
     };
   },
@@ -679,12 +720,12 @@ export function generateSyntheticCandles(symbol: string, limit: number): Candle[
 
 // ─── Utility Exports ───────────────────────────────────────
 
-export { getChainId, getDomain, computePayloadHash, getNonce, getAccountID, PERPS_BASE, GW_BASE };
+export { getChainId, getDomain, computePayloadHash, getNonce, getAccountID, getGwBase, getPerpsBase, getSpotBase };
 
 // ─── Wallet Profile / Copy-Trading Methods ─────────────────
 
 export async function getWalletTrades(address: string, symbol?: string, limit = 500) {
-  let url = `${PERPS_BASE}/accounts/${address}/trades?limit=${limit}`;
+  let url = `${getPerpsBase()}/accounts/${address}/trades?limit=${limit}`;
   if (symbol) url += `&symbol=${symbol}`;
   const data = await sodexGet(url);
   const raw = data?.data || [];
@@ -700,7 +741,7 @@ export async function getWalletTrades(address: string, symbol?: string, limit = 
 }
 
 export async function getWalletPosHistory(address: string, symbol?: string, limit = 500) {
-  let url = `${PERPS_BASE}/accounts/${address}/positions/history?limit=${limit}`;
+  let url = `${getPerpsBase()}/accounts/${address}/positions/history?limit=${limit}`;
   if (symbol) url += `&symbol=${symbol}`;
   const data = await sodexGet(url);
   const raw = data?.data || [];
@@ -717,7 +758,7 @@ export async function getWalletPosHistory(address: string, symbol?: string, limi
 }
 
 export async function getWalletFundings(address: string, symbol?: string, limit = 500) {
-  let url = `${PERPS_BASE}/accounts/${address}/fundings?limit=${limit}`;
+  let url = `${getPerpsBase()}/accounts/${address}/fundings?limit=${limit}`;
   if (symbol) url += `&symbol=${symbol}`;
   const data = await sodexGet(url);
   const raw = data?.data || [];

@@ -1,6 +1,6 @@
 # SoVibe — AI-Augmented Perpetual Trading Terminal
 
-> **SoVibe** combines a 7-strategy swarm, DGrid AI intelligence, deep SoSoValue data, and copy-trading to generate explained, executable signals on SoDEX testnet.
+> **SoVibe** combines a 7-strategy swarm, DGrid AI intelligence, deep SoSoValue data, and copy-trading to generate explained, executable signals on SoDEX testnet and mainnet.
 
 Built for the **SoSoValue Buildathon — May 2026**.
 
@@ -37,7 +37,7 @@ SoVibe turns raw market data + ETF flows + macro context + LLM-analyzed news int
 5. **Copy-Trading** — Analyze any SoDEX wallet: Win rate, Sharpe, Profit Factor. One-click proportional mirroring.
 6. **AutoHedge Sizing** — Scales position 1.5x on full consensus, 0.5x on conflict.
 7. **One-Click Execution** — EIP712-signed trades via `eth_signTypedData_v4`.
-8. **Dual-Source Backtesting** — SoDEX testnet 1h + SoSoValue 1d klines cross-reference.
+8. **Dual-Source Backtesting** — SoDEX 1h candles + SoSoValue 1d klines cross-reference.
 
 ### Key Features
 
@@ -101,8 +101,8 @@ SoVibe turns raw market data + ETF flows + macro context + LLM-analyzed news int
 │  signals.js  backtest.js  llm-agent.ts  indicators   │
 │  funding.js  market.js   etf-flow.js                 │
 ├──────────────┬───────────────────────────────────────┤
-│  SoSoValue   │  DGrid AI            SoDEX Testnet    │
-│  (9 modules) │  (200+ LLMs)         (chain 138565)   │
+│  SoSoValue   │  DGrid AI            SoDEX Network    │
+│  (9 modules) │  (200+ LLMs)         (testnet/mainnet)│
 └──────────────┴───────────────────────────────────────┘
 ```
 
@@ -158,9 +158,10 @@ Paste any SoDEX wallet address to see:
 ## 7. APIs & Data Sources
 
 ### SoDEX (Primary DEX)
-- **Testnet**: `https://testnet-gw.sodex.dev`
+- **Testnet**: `https://testnet-gw.sodex.dev` · Chain ID `138565`
+- **Mainnet**: `https://mainnet-gw.sodex.dev` · Chain ID `286623`
 - **Auth**: EIP712 typed data signatures
-- **Chain ID**: 138565
+- **Network switch**: Header dropdown persists choice in `web/.runtime-config.json`
 
 ### SoSoValue (Data Layer) — 9 modules
 
@@ -185,7 +186,7 @@ Paste any SoDEX wallet address to see:
 ## 8. Setup Instructions
 
 ### Prerequisites
-- Node.js 20+, MetaMask, SoDEX testnet in wallet (chain 138565)
+- Node.js 20+, MetaMask, SoDEX testnet or mainnet in wallet (chain 138565 or 286623)
 
 ### Install
 ```bash
@@ -196,10 +197,10 @@ npm install
 ### Environment
 ```bash
 DEX_PROVIDER=sodex
-DEX_TESTNET=true
+DEX_NETWORK=testnet          # testnet | mainnet
 SOSO_API_KEY=your-sosovalue-api-key
 DGRID_API_KEY=your-dgrid-api-key
-NEXT_PUBLIC_RPC_URL=https://testnet-v2.valuechain.xyz/
+NEXT_PUBLIC_RPC_URL=https://testnet-v2.valuechain.xyz/   # or mainnet RPC
 ```
 
 ### Run
@@ -246,6 +247,15 @@ npm run dev   # localhost:3000
 
 ## 11. Roadmap
 
+### Done — Wave 3
+- [x] Mainnet / testnet network switch with runtime persistence
+- [x] Encrypted local auto-trading bot keys (PBKDF2 + AES-GCM)
+- [x] Copy-trading leaderboard with curated wallet ranking
+- [x] Wallet profile reuse across profile and leaderboard APIs
+- [x] Multi-timeframe signal aggregation (15m / 1h / 4h / 1d)
+- [x] Live strategy performance scorecard + file-based PnL
+- [x] Hardened security: client-side bot signing, sanitized API errors
+
 ### Done — Wave 2
 - [x] DGrid AI intelligence layer
 - [x] SoSoValue deep integration (ETF, macro, market snapshots)
@@ -255,11 +265,10 @@ npm run dev   # localhost:3000
 - [x] Config card sharing
 - [x] Copy-trading
 
-### Next — Wave 3
-- [ ] Wallet discovery leaderboard (auto-find top wallets on SoDEX)
+### Next — Wave 4
 - [ ] Auto-copy mode (continuous position mirroring)
-- [ ] Multi-timeframe analysis
 - [ ] Telegram/Discord bot for signals
+- [ ] Referral program with fee rebates
 
 ---
 

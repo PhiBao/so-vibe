@@ -1,8 +1,12 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
+import Link from "next/link";
 import { useAccount } from "wagmi";
 import { useSodexTx } from "@/lib/use-sodex-tx";
 import { useToast } from "@/components/ToastProvider";
+import { getNetworkConfig } from "@/lib/config";
+import { isBotConfigured, signBotAction, submitSignedAction } from "@/lib/bot-signer-client";
+import Tooltip from "@/components/Tooltip";
 
 interface TradeSignal {
   id: string;
@@ -76,10 +80,90 @@ function persistConfig(config: BotConfig) {
   try { localStorage.setItem("bot-config", JSON.stringify(config)); } catch {}
 }
 
+// ─── PnL Scorecard Component ─────────────────────────────────
+
+function PnlScorecard() {
+  const [pnlData, setPnlData] = useState<any>(null);
+
+  useEffect(() => {
+    fetch("/api/bot/pnl").then(r => r.json()).then(setPnlData).catch(() => {});
+    const interval = setInterval(() => {
+      fetch("/api/bot/pnl").then(r => r.json()).then(setPnlData).catch(() => {});
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (!pnlData || pnlData.summary?.totalTrades === 0) return null;
+
+  const s = pnlData.summary;
+  const strats = pnlData.strategies || {};
+  const stratKeys = Object.keys(strats);
+
+  return (
+    <div className="terminal-card">
+      <div className="terminal-header">
+        <span className="text-[12px] font-bold tracking-wider">STRATEGY_PERFORMANCE</span>
+        <span className="text-[11px] text-[var(--text-secondary)] ml-auto">{s.totalTrades} closed trades</span>
+      </div>
+      <div className="p-4 space-y-4">
+        {/* Summary metrics */}
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
+          <div className="p-2 text-center bg-white/[0.02] border border-[var(--border)]">
+            <div className="text-[9px] text-[var(--text-secondary)] uppercase">Net PnL</div>
+            <div className={`text-[13px] font-mono font-bold ${s.netPnl >= 0 ? "text-[var(--green)]" : "text-[var(--red)]"}`}>${s.netPnl.toFixed(2)}</div>
+          </div>
+          <div className="p-2 text-center bg-white/[0.02] border border-[var(--border)]">
+            <div className="text-[9px] text-[var(--text-secondary)] uppercase">Win Rate</div>
+            <div className="text-[13px] font-mono font-bold text-[var(--cyan)]">{s.winRate * 100}%</div>
+          </div>
+          <div className="p-2 text-center bg-white/[0.02] border border-[var(--border)]">
+            <div className="text-[9px] text-[var(--text-secondary)] uppercase">Profit Factor</div>
+            <div className="text-[13px] font-mono font-bold text-[var(--text)]">{s.profitFactor}</div>
+          </div>
+          <div className="p-2 text-center bg-white/[0.02] border border-[var(--border)]">
+            <div className="text-[9px] text-[var(--text-secondary)] uppercase">Sharpe</div>
+            <div className="text-[13px] font-mono font-bold text-[var(--text)]">{s.sharpe}</div>
+          </div>
+          <div className="p-2 text-center bg-white/[0.02] border border-[var(--border)]">
+            <div className="text-[9px] text-[var(--text-secondary)] uppercase">Max DD</div>
+            <div className="text-[13px] font-mono font-bold text-[var(--red)]">{s.maxDrawdown}%</div>
+          </div>
+          <div className="p-2 text-center bg-white/[0.02] border border-[var(--border)]">
+            <div className="text-[9px] text-[var(--text-secondary)] uppercase">Avg Win/Loss</div>
+            <div className="text-[13px] font-mono font-bold text-[var(--text)]">${s.avgWin.toFixed(2)} / -${s.avgLoss.toFixed(2)}</div>
+          </div>
+        </div>
+
+        {/* Per-strategy breakdown */}
+        {stratKeys.length > 0 && (
+          <div>
+            <div className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wider mb-2">Strategy Breakdown</div>
+            <div className="space-y-1">
+              {stratKeys.map((key) => {
+                const st = strats[key];
+                return (
+                  <div key={key} className="flex items-center gap-4 py-1.5 px-3 bg-white/[0.02] border border-[var(--border)] text-[11px] font-mono">
+                    <span className="w-32 text-[var(--cyan)]">{key}</span>
+                    <span className="w-16 text-right">{st.trades} trades</span>
+                    <span className="w-16 text-right text-[var(--text-secondary)]">{st.winRate}% win</span>
+                    <span className={`w-24 text-right font-bold ${st.realizedPnl >= 0 ? "text-[var(--green)]" : "text-[var(--red)]"}`}>${st.realizedPnl.toFixed(2)}</span>
+                    <span className="w-20 text-right text-[var(--text-secondary)]">avg ${st.avgPnl.toFixed(2)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function BotsPage() {
   const { address, isConnected } = useAccount();
   const { sendInstructions, needsNetworkSwitch, walletChainId } = useSodexTx();
   const { addToast } = useToast();
+  const networkCfg = getNetworkConfig();
 
   const [mounted, setMounted] = useState(false);
 
@@ -88,6 +172,9 @@ export default function BotsPage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [signals, setSignals] = useState<TradeSignal[]>([]);
   const [autoExecute, setAutoExecute] = useState(false);
+  const [execMode, setExecMode] = useState<"off" | "manual" | "auto">("off");
+  const [autoAvailable, setAutoAvailable] = useState(false);
+  const [networkName, setNetworkName] = useState("TESTNET");
   const [executingId, setExecutingId] = useState<string | null>(null);
   const [executeError, setExecuteError] = useState<string | null>(null);
   const [marketLimits, setMarketLimits] = useState<Record<string, MarketLimit>>({});
@@ -168,6 +255,14 @@ export default function BotsPage() {
     return () => clearInterval(interval);
   }, [fetchMarketLimits]);
 
+  // Check auto-trading availability from browser-stored bot keys
+  useEffect(() => {
+    setAutoAvailable(isBotConfigured());
+    const onStorage = () => setAutoAvailable(isBotConfigured());
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   useEffect(() => {
     if (!isConnected || !address) return;
     const fetchBalance = async () => {
@@ -239,15 +334,18 @@ export default function BotsPage() {
   }, [logs]);
 
   useEffect(() => {
-    if (!autoExecute || !isConnected || signals.length === 0) return;
+    if (!autoExecute || signals.length === 0) return;
     const exec = async () => {
       for (const sig of signals) {
-        if (!address) continue;
-        await handleExecute(sig);
+        if (execMode === "auto") {
+          await handleAutoExecute(sig);
+        } else if (isConnected && address) {
+          await handleExecute(sig);
+        }
       }
     };
     exec();
-  }, [autoExecute, signals, isConnected, address]);
+  }, [autoExecute, signals, execMode, isConnected, address]);
 
   const toggleBot = async () => {
     const nextRunning = !running;
@@ -298,6 +396,7 @@ export default function BotsPage() {
         body: JSON.stringify({
           signalId: sig.id, symbol: sig.symbol, side: sig.side,
           size: sig.size, price: sig.entryPrice, leverage: sig.leverage, wallet: address,
+          stopLoss: sig.stopLoss, takeProfit: sig.takeProfit,
         }),
       });
       const data = await res.json();
@@ -307,29 +406,80 @@ export default function BotsPage() {
       const result = await sendInstructions(data.action);
       if (!result.success) { setExecuteError(result.error || "Transaction failed"); addToast(result.error || "Transaction failed", "error"); return; }
 
-      addToast(`${sig.side.toUpperCase()} ${sig.symbol} executed`, "success");
-
-      const hasSlTp = sig.stopLoss || sig.takeProfit;
-      if (hasSlTp && address) {
-        try {
-          await new Promise((r) => setTimeout(r, 5000));
-          const sltpRes = await fetch("/api/positions/sl-tp", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ symbol: sig.symbol, side: sig.side, stopLoss: sig.stopLoss, takeProfit: sig.takeProfit, wallet: address }),
-          });
-          const sltpData = await sltpRes.json();
-          if (sltpData.success && sltpData.actions) {
-            for (let i = 0; i < sltpData.actions.length; i++) {
-              if (i > 0) await new Promise((r) => setTimeout(r, 100));
-              await sendInstructions(sltpData.actions[i]);
-            }
-          }
-        } catch {}
+      // Attach SL/TP brackets with ≥100ms nonce stagger
+      const brackets = data.bracketActions || [];
+      let bracketOk = 0;
+      for (let i = 0; i < brackets.length; i++) {
+        await new Promise((r) => setTimeout(r, i * 150));
+        const br = await sendInstructions(brackets[i]);
+        if (br.success) bracketOk++;
       }
+
+      addToast(`${sig.side.toUpperCase()} ${sig.symbol} executed${bracketOk > 0 ? ` · ${bracketOk} SL/TP attached` : ""}`, "success");
       setSignals((prev) => prev.filter((s) => s.id !== sig.id));
     } catch (err: unknown) {
       setExecuteError(err instanceof Error ? err.message : "Request failed");
       addToast(err instanceof Error ? err.message : "Request failed", "error");
+    } finally {
+      setExecutingId(null);
+    }
+  };
+
+  const handleAutoExecute = async (sig: TradeSignal) => {
+    if (!address) return;
+    if (!isBotConfigured()) {
+      setExecuteError("Bot keys not configured. Go to Settings > Auto Trade Bot.");
+      addToast("Bot keys not configured", "error");
+      return;
+    }
+    setExecutingId(sig.id);
+    setExecuteError(null);
+    try {
+      const res = await fetch("/api/bot/auto-execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address, symbol: sig.symbol, side: sig.side,
+          size: sig.size, price: sig.entryPrice, leverage: sig.leverage,
+          stopLoss: sig.stopLoss, takeProfit: sig.takeProfit,
+        }),
+      });
+      const data = await res.json();
+      if (!data.success || !data.actions) {
+        setExecuteError(data.error || "Auto-execute failed");
+        addToast(data.error || "Auto-execute failed", "error");
+        return;
+      }
+
+      // Sign and submit each action locally with the stored bot key
+      let allOk = true;
+      const baseNonce = data.actions[0]?.message?.nonce || Date.now();
+      for (let i = 0; i < data.actions.length; i++) {
+        const action = data.actions[i];
+        // Stagger nonces ≥100ms for batched orders
+        const nonce = i === 0 ? baseNonce : baseNonce + i * 150;
+        const signed = await signBotAction(action, nonce);
+        const result = await submitSignedAction(signed);
+        if (!result.success) {
+          allOk = false;
+          setExecuteError(result.error || `Bracket ${i + 1} failed`);
+          addToast(result.error || `Bracket ${i + 1} failed`, "error");
+          break;
+        }
+        if (i < data.actions.length - 1) await new Promise((r) => setTimeout(r, 150));
+      }
+
+      if (allOk) {
+        addToast(`AUTO ${sig.side.toUpperCase()} ${sig.symbol} executed`, "success");
+        setSignals((prev) => prev.filter((s) => s.id !== sig.id));
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Auto-execute failed";
+      const hint = msg.toLowerCase().includes("api key") || msg.toLowerCase().includes("unauthorized")
+        ? " Make sure the API key is registered on-chain in Settings."
+        : "";
+      setExecuteError(msg + hint);
+      addToast(msg + hint, "error");
     } finally {
       setExecutingId(null);
     }
@@ -353,9 +503,9 @@ export default function BotsPage() {
       {isConnected && needsNetworkSwitch && (
         <div className="terminal-card p-3 border-l-2 border-l-[var(--yellow)]">
           <div className="text-[12px] font-mono text-[var(--yellow)]">
-            <div>⚠ WRONG NETWORK — MetaMask on chain {walletChainId}, SoDEX requires 138565</div>
-            <div>Add SoDEX Testnet manually: MetaMask → Settings → Networks → Add Network</div>
-            <div>Name: SoDEX Testnet | Chain ID: 138565 | Currency: SOSO</div>
+            <div>⚠ WRONG NETWORK — MetaMask on chain {walletChainId}, SoDEX requires {networkCfg.chainId}</div>
+            <div>Add {networkCfg.displayName} manually: MetaMask → Settings → Networks → Add Network</div>
+            <div>Name: {networkCfg.displayName} | Chain ID: {networkCfg.chainId} | Currency: SOSO</div>
           </div>
         </div>
       )}
@@ -365,13 +515,24 @@ export default function BotsPage() {
           <p className="text-[12px] text-[var(--text-secondary)] font-mono mt-1">Strategy swarm automation — {activeStrategyCount}/7 strategies active</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setAutoExecute(!autoExecute)}
-            className={`btn-terminal text-[12px] py-2 px-4 ${autoExecute ? "btn-terminal-green" : ""}`}
-            disabled={!isConnected}
-          >
-            {autoExecute ? "[ AUTO: ON ]" : "[ AUTO: OFF ]"}
-          </button>
+          <div className="flex bg-black/30 border border-[var(--border)] rounded-sm overflow-hidden">
+            <button
+              onClick={() => { setAutoExecute(false); setExecMode("off"); }}
+              className={`text-[11px] px-3 py-1.5 font-mono transition-colors ${execMode === "off" && !autoExecute ? "bg-[var(--red)]/20 text-[var(--red)] font-bold" : "text-[var(--text-secondary)] hover:text-[var(--text)]"}`}
+            >OFF</button>
+            <button
+              onClick={() => { setAutoExecute(true); setExecMode("manual"); }}
+              disabled={!isConnected}
+              className={`text-[11px] px-3 py-1.5 font-mono transition-colors border-x border-[var(--border)] ${execMode === "manual" && autoExecute ? "bg-[var(--cyan)]/20 text-[var(--cyan)] font-bold" : "text-[var(--text-secondary)] hover:text-[var(--text)] disabled:opacity-30"}`}
+            >MANUAL</button>
+            <Tooltip text={autoAvailable ? "Trades are signed locally with your decrypted bot key." : "Go to Settings to register and save an encrypted bot key before enabling AUTO."}>
+              <button
+                onClick={() => { setAutoExecute(true); setExecMode("auto"); }}
+                disabled={!autoAvailable}
+                className={`text-[11px] px-3 py-1.5 font-mono transition-colors ${execMode === "auto" && autoExecute ? "bg-[var(--green)]/20 text-[var(--green)] font-bold" : "text-[var(--text-secondary)] hover:text-[var(--text)] disabled:opacity-30"}`}
+              >AUTO</button>
+            </Tooltip>
+          </div>
           <button
             onClick={toggleBot}
             className={`btn-terminal text-[13px] py-2 px-6 font-bold ${running ? "btn-terminal-red" : "btn-terminal-green"}`}
@@ -388,6 +549,12 @@ export default function BotsPage() {
           <span className={`text-[13px] font-mono font-bold ${running ? "text-[var(--green)]" : "text-[var(--red)]"}`}>
             SOVIBE_BOT {running ? "RUNNING" : "OFFLINE"}
           </span>
+          {execMode === "auto" && !autoAvailable && (
+            <span className="text-[11px] text-[var(--yellow)] font-mono ml-4">
+              AUTO requires unlocked bot keys —{" "}
+              <Link href="/settings" className="underline text-[var(--cyan)]">configure in Settings</Link>
+            </span>
+          )}
           {running && (
             <>
               <span className="text-[var(--text-secondary)]">|</span>
@@ -456,11 +623,11 @@ export default function BotsPage() {
                           <div className="text-[11px] text-[var(--text-secondary)] font-mono">▲{sig.longVotes} ▼{sig.shortVotes} votes</div>
                         </div>
                         <button
-                          onClick={() => handleExecute(sig)}
-                          disabled={!isConnected || needsNetworkSwitch || executingId === sig.id}
-                          className={`btn-terminal text-[12px] py-2 px-4 disabled:opacity-40 font-bold ${needsNetworkSwitch ? "border-[var(--yellow)] text-black bg-[var(--yellow)]" : "btn-terminal-green"}`}
+                          onClick={() => execMode === "auto" ? handleAutoExecute(sig) : handleExecute(sig)}
+                          disabled={(!isConnected && execMode !== "auto") || needsNetworkSwitch || executingId === sig.id}
+                          className={`btn-terminal text-[12px] py-2 px-4 disabled:opacity-40 font-bold ${needsNetworkSwitch ? "border-[var(--yellow)] text-black bg-[var(--yellow)]" : execMode === "auto" ? "btn-terminal-green" : "btn-terminal-green"}`}
                         >
-                          {!isConnected ? "CONNECT" : needsNetworkSwitch ? "WRONG NET" : executingId === sig.id ? "SIGNING..." : "[ EXECUTE ]"}
+                          {!isConnected && execMode !== "auto" ? "CONNECT" : needsNetworkSwitch ? "WRONG NET" : executingId === sig.id ? "SIGNING..." : execMode === "auto" ? "[ AUTO EXECUTE ]" : "[ EXECUTE ]"}
                         </button>
                       </div>
                     </div>
@@ -678,6 +845,8 @@ export default function BotsPage() {
         </div>
       </div>
 
+      {/* Strategy Performance Scorecard */}
+      <PnlScorecard />
       {/* Config Card Export */}
       <div className="terminal-card p-4">
         <div className="flex items-center justify-between">

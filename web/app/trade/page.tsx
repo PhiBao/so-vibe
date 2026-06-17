@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useAccount } from "wagmi";
 import { useSodexTx } from "@/lib/use-sodex-tx";
 import { useToast } from "@/components/ToastProvider";
+import { getNetworkConfig } from "@/lib/config";
 
 interface MarketLimit {
   maxLeverage: number;
@@ -321,9 +322,9 @@ function TradeContent() {
 
             {isConnected && needsNetworkSwitch && (
               <div className="p-2 border border-[var(--yellow)]/30 bg-[var(--yellow)]/5 text-[var(--yellow)] text-[10px] font-mono">
-                <div>⚠ MetaMask is on chain {walletChainId}. SoDEX requires chain 138565.</div>
-                <div>Add SoDEX Testnet manually: MetaMask → Settings → Networks → Add Network</div>
-                <div>Name: SoDEX Testnet | Chain ID: 138565 | Currency: SOSO</div>
+                <div>⚠ MetaMask is on chain {walletChainId}. SoDEX requires chain {getNetworkConfig().chainId}.</div>
+                <div>Add {getNetworkConfig().displayName} manually: MetaMask → Settings → Networks → Add Network</div>
+                <div>Name: {getNetworkConfig().displayName} | Chain ID: {getNetworkConfig().chainId} | Currency: SOSO</div>
               </div>
             )}
             <button
