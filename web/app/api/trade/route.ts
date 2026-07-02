@@ -3,8 +3,10 @@ import { NextResponse } from "next/server";
 import { defaultAuditor } from "@/lib/security";
 import { getAdapter, initDex } from "@/lib/dex";
 import { sanitizeError } from "@/lib/api-error";
+import { applyRequestNetwork } from "@/lib/request-network";
 
 export async function POST(request: Request) {
+  applyRequestNetwork(request);
   const body = await request.json();
   const { symbol, side, size, price, stopLoss, takeProfit, leverage, wallet } = body;
 

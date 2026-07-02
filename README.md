@@ -204,7 +204,8 @@ DEX_PROVIDER=sodex
 DEX_NETWORK=testnet          # testnet | mainnet
 SOSO_API_KEY=your-sosovalue-api-key
 DGRID_API_KEY=your-dgrid-api-key
-NEXT_PUBLIC_RPC_URL=https://testnet-v2.valuechain.xyz/   # or mainnet RPC
+NEXT_PUBLIC_RPC_URL=https://testnet-v2.valuechain.xyz/   # testnet RPC
+NEXT_PUBLIC_MAINNET_RPC_URL=https://mainnet.valuechain.xyz/   # mainnet RPC
 ```
 
 ### Run

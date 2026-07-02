@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useAccount } from "wagmi";
 import { useToast } from "@/components/ToastProvider";
-import { getNetworkConfig, type NetworkConfig } from "@/lib/config";
+import { getNetworkConfig, type NetworkName, type NetworkConfig } from "@/lib/config";
 import { useSodexTx } from "@/lib/use-sodex-tx";
 import {
   hasEncryptedBotKeys,
@@ -78,7 +78,7 @@ export default function SettingsPage() {
     setMounted(true);
     fetch("/api/config")
       .then((r) => r.json())
-      .then(setConfig)
+      .then((data) => setConfig({ ...data, name: data.network || data.name }))
       .catch(() => {});
 
     setHasStoredKeys(hasEncryptedBotKeys());

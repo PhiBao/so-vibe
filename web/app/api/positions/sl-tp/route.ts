@@ -2,8 +2,10 @@ import "@/lib/config-server";
 import { NextResponse } from "next/server";
 import { defaultAuditor } from "@/lib/security";
 import { getAdapter, initDex } from "@/lib/dex";
+import { applyRequestNetwork } from "@/lib/request-network";
 
 export async function POST(request: Request) {
+  applyRequestNetwork(request);
   const body = await request.json();
   const { symbol, side, stopLoss, takeProfit, wallet, size } = body;
 

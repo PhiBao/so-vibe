@@ -100,12 +100,13 @@ DEX_TESTNET=true
 SOSO_API_KEY=your-sosovalue-api-key
 DGRID_API_KEY=your-dgrid-api-key
 NEXT_PUBLIC_RPC_URL=https://testnet-v2.valuechain.xyz/
+NEXT_PUBLIC_MAINNET_RPC_URL=https://mainnet.valuechain.xyz/
 
 # Optional: seed the copy-trading leaderboard
 # LEADERBOARD_WALLETS=0x...,0x...
 ```
 
-Runtime network choice is persisted in `web/.runtime-config.json` and selected via the header dropdown. Bot keys are configured by the user in the browser, encrypted with a user password, and stored in `localStorage`; the plaintext private key is kept in memory only while unlocked.
+Runtime network choice is persisted in a cookie (`sovibe-network`) and selected via the header dropdown. API routes read the cookie on every request, so the choice works across Vercel serverless invocations. Bot keys are configured by the user in the browser, encrypted with a user password, and stored in `localStorage`; the plaintext private key is kept in memory only while unlocked.
 
 ## The 7-Strategy Swarm (Wave 2)
 

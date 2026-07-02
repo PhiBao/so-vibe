@@ -44,7 +44,7 @@ lib/dex/sodex-adapter.ts — Fixed SoDEX REST v1 paths (`/api/v1/perps/trade/ord
 
 ### Feature Summary
 
-Mainnet / Testnet Switch — Runtime network selection with server-side persistence. Wagmi registers both chains. EIP712 domains stay in sync.
+Mainnet / Testnet Switch — Runtime network selection persisted via cookie (`sovibe-network`). Wagmi registers both chains. EIP712 domains stay in sync. Works on Vercel serverless — no file-based config needed.
 
 Encrypted Auto-Trading Bot Keys — API key encrypted with a user password, decrypted only in memory, signs orders locally. No server-side signer. On-chain `addAPIKey` registration flow included.
 

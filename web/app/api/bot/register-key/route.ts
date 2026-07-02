@@ -2,8 +2,10 @@ import "@/lib/config-server";
 import { NextResponse } from "next/server";
 import { initDex, getAdapter } from "@/lib/dex";
 import { sanitizeError } from "@/lib/api-error";
+import { applyRequestNetwork } from "@/lib/request-network";
 
 export async function POST(request: Request) {
+  applyRequestNetwork(request);
   const body = await request.json().catch(() => ({}));
   const { wallet, publicKey, name } = body;
 

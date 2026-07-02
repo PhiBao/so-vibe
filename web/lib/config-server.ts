@@ -26,7 +26,12 @@ function readConfig(): RuntimeConfig {
 }
 
 function writeConfig(config: RuntimeConfig) {
-  writeFileSync(RUNTIME_CONFIG_PATH, JSON.stringify({ ...config, updatedAt: Date.now() }, null, 2));
+  try {
+    writeFileSync(RUNTIME_CONFIG_PATH, JSON.stringify({ ...config, updatedAt: Date.now() }, null, 2));
+  } catch {
+    // Ignore write errors — Vercel and other serverless platforms have read-only filesystems.
+    // Network persistence relies on cookies in those environments.
+  }
 }
 
 export function getRuntimeNetwork(): NetworkName | null {

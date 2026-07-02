@@ -67,6 +67,13 @@ let marketCache: MarketInfo[] | null = null;
 let marketCacheTime = 0;
 let accountCache: Map<string, number> = new Map();
 
+export function resetCaches() {
+  marketCache = null;
+  marketCacheTime = 0;
+  accountCache.clear();
+  nonceCounters.clear();
+}
+
 // ─── Account Resolution ────────────────────────────────────
 
 async function getAccountID(walletAddress: string): Promise<number> {

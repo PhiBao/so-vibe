@@ -1,18 +1,22 @@
 import "@/lib/config-server";
 import { NextResponse } from "next/server";
 import { getAdapter, initDex } from "@/lib/dex";
+import { applyRequestNetwork } from "@/lib/request-network";
 
 let marketCache: any = null;
 let marketCacheTime = 0;
+let marketCacheNetwork = "";
 
-export async function GET() {
+export async function GET(request: Request) {
+  const network = applyRequestNetwork(request);
   try {
     const now = Date.now();
-    if (!marketCache || now - marketCacheTime > 60000) {
+    if (!marketCache || now - marketCacheTime > 60000 || marketCacheNetwork !== network) {
       await initDex();
       const markets = await getAdapter().getMarkets();
       marketCache = markets;
       marketCacheTime = now;
+      marketCacheNetwork = network;
     }
 
     const limits: Record<string, { maxLeverage: number; takerFee: number; makerFee: number; isolatedOnly: boolean }> = {};

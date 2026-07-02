@@ -2,8 +2,10 @@ import "@/lib/config-server";
 import { NextResponse } from "next/server";
 import { buildWalletProfile } from "@/lib/wallet-profile";
 import { sanitizeError } from "@/lib/api-error";
+import { applyRequestNetwork } from "@/lib/request-network";
 
 export async function GET(request: Request) {
+  applyRequestNetwork(request);
   const { searchParams } = new URL(request.url);
   const address = searchParams.get("address");
 

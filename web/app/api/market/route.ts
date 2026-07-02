@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { getAdapter, initDex } from "@/lib/dex";
+import { applyRequestNetwork } from "@/lib/request-network";
 
 export async function GET(request: Request) {
+  applyRequestNetwork(request);
   const { searchParams } = new URL(request.url);
   const symbol = searchParams.get("symbol") || "SOL";
 

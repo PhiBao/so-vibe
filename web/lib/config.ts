@@ -38,7 +38,7 @@ const NETWORKS: Record<NetworkName, NetworkConfig> = {
     chainHex: "0x45f9f",
     displayName: "ValueChain",
     gwBase: "https://mainnet-gw.sodex.dev",
-    rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || "https://mainnet.valuechain.xyz/",
+    rpcUrl: process.env.NEXT_PUBLIC_MAINNET_RPC_URL || "https://mainnet.valuechain.xyz/",
     explorerUrl: "https://main-scan.valuechain.xyz/",
     testnet: false,
   },

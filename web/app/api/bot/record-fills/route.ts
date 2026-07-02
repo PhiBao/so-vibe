@@ -1,6 +1,7 @@
 import "@/lib/config-server";
 import { NextResponse } from "next/server";
 import { getWalletPosHistory } from "@/lib/dex/sodex-adapter";
+import { applyRequestNetwork } from "@/lib/request-network";
 import { recordTrade, getRecentTrades } from "@/lib/engine/pnl-tracker";
 
 const TAKER_FEE = 0.0005;
@@ -10,6 +11,7 @@ function tradeKey(p: { symbol: string; entryTime: number; exitTime: number }) {
 }
 
 export async function POST(request: Request) {
+  applyRequestNetwork(request);
   const body = await request.json().catch(() => ({}));
   const { address } = body;
 

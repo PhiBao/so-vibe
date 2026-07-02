@@ -2,8 +2,10 @@ import "@/lib/config-server";
 import { NextResponse } from "next/server";
 import { getAdapter, initDex } from "@/lib/dex";
 import { getWalletTrades, getWalletPosHistory } from "@/lib/dex/sodex-adapter";
+import { applyRequestNetwork } from "@/lib/request-network";
 
 export async function POST(request: Request) {
+  applyRequestNetwork(request);
   const body = await request.json().catch(() => ({}));
   const { targetAddress, wallet, allocation, minTrades = 5 } = body;
 

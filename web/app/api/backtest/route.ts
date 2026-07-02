@@ -7,6 +7,7 @@ import { getETFSignal } from "@/lib/sosovalue/etf";
 import { getMacroSignal } from "@/lib/sosovalue/macro";
 import { analyzeFunding } from "@/lib/engine/funding.js";
 import { sanitizeError } from "@/lib/api-error";
+import { applyRequestNetwork } from "@/lib/request-network";
 
 const SOSO_BASE = "https://openapi.sosovalue.com/openapi/v1";
 const API_KEY = process.env.SOSO_API_KEY || "";
@@ -48,6 +49,7 @@ function getStrategyEnabled(strategyConfig: Record<string, any> | undefined, key
 }
 
 export async function POST(request: Request) {
+  applyRequestNetwork(request);
   const body = await request.json();
   const {
     symbol,

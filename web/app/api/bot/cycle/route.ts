@@ -8,8 +8,10 @@ import { getETFSignal } from "@/lib/sosovalue/etf";
 import { getMacroSignal } from "@/lib/sosovalue/macro";
 import { explainSignal } from "@/lib/engine/llm-agent";
 import { getMarketSnapshot } from "@/lib/sosovalue/market";
+import { applyRequestNetwork } from "@/lib/request-network";
 
 export async function POST(request: Request) {
+  applyRequestNetwork(request);
   const body = await request.json().catch(() => ({}));
   const symbols: string[] = body.symbols || ["SOL-USD", "ETH-USD", "BTC-USD"];
   const minConfidence = body.minConfidence || 0.55;

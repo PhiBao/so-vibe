@@ -1,8 +1,10 @@
 import "@/lib/config-server";
 import { NextResponse } from "next/server";
 import { getWalletPosHistory } from "@/lib/dex/sodex-adapter";
+import { applyRequestNetwork } from "@/lib/request-network";
 
 export async function GET(request: Request) {
+  applyRequestNetwork(request);
   const { searchParams } = new URL(request.url);
   const address = searchParams.get("address");
 

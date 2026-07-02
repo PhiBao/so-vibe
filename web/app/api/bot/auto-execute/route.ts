@@ -4,8 +4,10 @@ import { initDex, getAdapter } from "@/lib/dex";
 import { getAccountID } from "@/lib/dex/sodex-adapter";
 import { getNetworkConfig } from "@/lib/config";
 import { sanitizeError } from "@/lib/api-error";
+import { applyRequestNetwork } from "@/lib/request-network";
 
 export async function POST(request: Request) {
+  applyRequestNetwork(request);
   const body = await request.json().catch(() => ({}));
   const { address, symbol, side, size, price, leverage, stopLoss, takeProfit } = body;
 

@@ -3,10 +3,12 @@ import { NextResponse } from "next/server";
 import { buildWalletProfile } from "@/lib/wallet-profile";
 import { getLeaderboardWallets } from "@/lib/leaderboard-wallets";
 import { sanitizeError } from "@/lib/api-error";
+import { applyRequestNetwork } from "@/lib/request-network";
 
 export type LeaderboardSort = "sharpe" | "totalReturn" | "winRate" | "profitFactor" | "totalTrades";
 
 export async function GET(request: Request) {
+  applyRequestNetwork(request);
   const { searchParams } = new URL(request.url);
   const sort = (searchParams.get("sort") as LeaderboardSort) || "sharpe";
   const minTrades = parseInt(searchParams.get("minTrades") || "5", 10);
