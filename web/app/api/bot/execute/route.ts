@@ -21,12 +21,7 @@ export async function POST(request: Request) {
   }
 
   const auditChecks = defaultAuditor.auditOrder({
-    symbol,
-    side,
-    size: parseFloat(size),
-    price: parseFloat(price),
-    leverage,
-    wallet,
+    symbol, side, size: parseFloat(size), price: parseFloat(price), leverage, wallet,
   });
   const failedChecks = auditChecks.filter((c) => !c.passed);
   if (failedChecks.length > 0) {
@@ -44,30 +39,17 @@ export async function POST(request: Request) {
       wallet,
       leverage,
       price: parseFloat(price),
+      stopLoss: stopLoss ? parseFloat(stopLoss) : undefined,
+      takeProfit: takeProfit ? parseFloat(takeProfit) : undefined,
     });
-
-    // Build SL/TP brackets so the client can sign and attach them after the main order.
-    const bracketActions: any[] = [];
-    const closeSide = side === "long" || side === "buy" ? "short" : "long";
-    if (stopLoss) {
-      bracketActions.push(
-        await adapter.buildStopLoss(symbol, closeSide as any, parseFloat(stopLoss), { wallet, size: parseFloat(size) })
-      );
-    }
-    if (takeProfit) {
-      bracketActions.push(
-        await adapter.buildTakeProfit(symbol, closeSide as any, parseFloat(takeProfit), { wallet, size: parseFloat(size) })
-      );
-    }
 
     return NextResponse.json({
       success: true,
       action,
-      bracketActions,
       signalId,
       stopLoss,
       takeProfit,
-      message: `Sign transaction to submit market order (${side} ${size} ${symbol})`,
+      message: `Sign transaction to submit order (${side} ${size} ${symbol}) with SL/TP brackets`,
     });
   } catch (err: unknown) {
     return NextResponse.json({ error: sanitizeError(err) }, { status: 500 });

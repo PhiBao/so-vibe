@@ -23,7 +23,7 @@ Every signal includes LLM reasoning. Every signal can be signed and submitted on
 web/
 ├── app/
 │   ├── api/
-│   │   ├── bot/              # Bot cycle, auto-execute, execute, signals, status, toggle, PnL
+│   │   ├── bot/              # Bot cycle, auto-execute, execute, signals, status, toggle, PnL, fills, record-fills, register-key, list-keys
 │   │   ├── config/           # Runtime network config persistence
 │   │   ├── market/           # Market data (price, orderbook)
 │   │   ├── markets/          # All market limits
@@ -47,6 +47,8 @@ web/
 ├── components/
 │   ├── TerminalLayout.tsx    # Sidebar + nav + wallet panel
 │   ├── NetworkSwitch.tsx     # TESTNET/MAINNET dropdown
+│   ├── PnLWidget.tsx         # Dashboard live PnL + equity-curve sparkline
+│   ├── Tooltip.tsx           # Hover tooltip component
 │   ├── ToastProvider.tsx     # Toast notification system
 │   └── WalletProvider.tsx    # Wagmi provider
 ├── lib/
@@ -80,7 +82,8 @@ web/
 │   ├── encrypted-store.ts    # Password-encrypted browser keystore for bot keys
 │   ├── bot-signer-client.ts  # Client-side EIP712 bot signer
 │   ├── leaderboard-wallets.ts# Curated wallet list for leaderboard
-│   └── wallet-profile.ts     # Shared wallet analytics builder
+│   ├── wallet-profile.ts     # Shared wallet analytics builder
+│   └── request-network.ts    # Cookie-based network persistence (Vercel-safe)
 ```
 
 ## Quick Commands
@@ -200,6 +203,37 @@ Computed only from on-chain closed fills:
 - Dashboard `PnLWidget` shows Net PnL, Win Rate, Sharpe, Max Drawdown, equity-curve sparkline, recent trades
 - `/bots` `SignalAccuracyPanel` shows hit rate and avg slippage from real fills
 
+## SL/TP Brackets
+
+SoDEX requires brackets in the same batch as the main order:
+- `buildMarketOrder` accepts optional `stopLoss`/`takeProfit` parameters
+- Main order uses `modifier: 3` (BRACKET), brackets use `modifier: 4` (ATTACHED_STOP)
+- All three orders submitted in one `PerpsNewOrderRequest.orders[]` array
+- Client-side: single sign-and-submit, no delayed bracket submissions
+- Stop orders on existing positions use `modifier: 2` (STOP) via `buildStopLoss`/`buildTakeProfit`
+
+Signal SL/TP validation in `signals.js`:
+- Strategies are filtered by signal direction before picking SL/TP
+- SL/TP validated against current price: SL below price for longs, above for shorts
+- ATR-based fallbacks (`price ± atr × 1.5` / `price ± atr × 3`) guarantee sensible values
+- Multi-TF synthesis also validates across timeframe results
+
+Open position stop display:
+- `/api/wallet/balance` fetches open orders from SoDEX and maps stop prices by symbol
+- Dashboard WALLET_OVERVIEW and positions page show SL/TP badges per position
+- `stopType` returned as strings from SoDEX REST API — compared against `"STOP_LOSS"` / `"TAKE_PROFIT"`
+
+## Settings & Bot Key Flow
+
+1. User creates API key at sodex.com/apikeys (name + public/private key pair)
+2. In `/settings`, click **FETCH FROM SODEX** to pull real key names from the account
+3. Select a key, enter the matching 32-byte private key, set encryption password, click **SAVE ENCRYPTED**
+4. Keys are encrypted with PBKDF2 + AES-GCM and stored in localStorage
+5. After saving, keys are unlocked in memory
+6. Navigate to `/bots`, select **AUTO** execution mode
+7. Bot cycles generate signals; AUTO submits via `signBotAction` + `submitSignedAction`
+8. `X-API-Key` header carries the key **name**; `X-API-Sign` carries the EIP712 signature
+
 ## Security Checklist
 
 - [x] All inputs validated via `SecurityAuditor`
@@ -222,6 +256,9 @@ Computed only from on-chain closed fills:
 6. **LLM calls are additive, not essential** — all LLM functions have fallback paths. The bot works without DGRID_API_KEY (falls back to keyword sentiment).
 7. **Do not put credentials in `NEXT_PUBLIC_RPC_URL`** — it is inlined into the client bundle. Use a credential-free public RPC or a server-side relay.
 8. **No WalletConnect** — MetaMask (`injected()`) only.
+9. **SoDEX REST returns enum strings, not ints**: `orderSide` returns `"BUY"`/`"SELL"`, `stopType` returns `"STOP_LOSS"`/`"TAKE_PROFIT"`. Compare against strings, not integers.
+10. **`X-API-Key` carries the key NAME**, not the EVM address or hex value.
+11. **API keys are created at sodex.com/apikeys** — they are already registered on-chain. Do not call `addAPIKey` via REST for keys created through the UI.
 
 ## Wave 3 Roadmap
 
@@ -229,4 +266,13 @@ Computed only from on-chain closed fills:
 - [x] One-click trade mirroring with proportional position sizing
 - [x] Strategy config cards — shareable URLs for bot settings
 - [x] Wallet profiles with PnL/win rate analytics
+- [x] Mainnet / testnet network switch with cookie persistence (Vercel-safe)
+- [x] Encrypted local auto-trading bot keys (PBKDF2 + AES-GCM)
+- [x] Auto-execute mode with client-side EIP712 signing
+- [x] SL/TP brackets in single batch (BRACKET/ATTACHED_STOP)
+- [x] Signal SL/TP direction validation in swarm synthesis
+- [x] Open position stop display (SL/TP badges on dashboard + positions)
+- [x] Real-data-only backtest with slippage modeling, false-positive analysis, parameter sweep
+- [x] Live PnL from on-chain closed fills (record-fills, PnLWidget, SignalAccuracyPanel)
+- [x] Settings page: FETCH FROM SODEX, key-pair verification, sodex.com/apikeys link
 - [ ] Referral program for growth

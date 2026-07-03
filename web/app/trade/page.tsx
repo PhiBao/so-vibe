@@ -121,6 +121,8 @@ function TradeContent() {
           price: marketPrice,
           leverage: maxLeverage,
           wallet: address,
+          stopLoss: stopLoss || undefined,
+          takeProfit: takeProfit || undefined,
         }),
       });
       const data = await res.json();
@@ -149,44 +151,6 @@ function TradeContent() {
         setResult(`[OK] ${side === "buy" ? "LONG" : "SHORT"} ${sizeUnits.toFixed(4)} ${symbol} @ $${price.toFixed(2)}`);
       }
       addToast(`${side === "buy" ? "LONG" : "SHORT"} ${sizeUnits.toFixed(4)} ${symbol} submitted`, "success");
-
-      // Phase 2: SL/TP conditional order (after position is open)
-      const hasSlTp = stopLoss || takeProfit;
-      if (hasSlTp && address) {
-        try {
-          await new Promise((r) => setTimeout(r, 5000)); // wait 5s for position to settle on testnet
-          const sltpRes = await fetch("/api/positions/sl-tp", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              symbol,
-              side,
-              stopLoss: stopLoss ? parseFloat(stopLoss) : null,
-              takeProfit: takeProfit ? parseFloat(takeProfit) : null,
-              wallet: address,
-              size: sizeUnits,
-            }),
-          });
-          const sltpData = await sltpRes.json();
-          if (sltpData.success && sltpData.actions) {
-            for (let i = 0; i < sltpData.actions.length; i++) {
-              const action = sltpData.actions[i];
-              // Stagger nonces by 100ms to avoid "nonce already used"
-              if (i > 0) await new Promise((r) => setTimeout(r, 100));
-              const sltpResult = await sendInstructions(action);
-              if (sltpResult.success) {
-                setResult((prev) => `${prev}\n[OK] SL/TP set`);
-                addToast("SL/TP set successfully", "success");
-              } else {
-                addToast(sltpResult.error || "SL/TP failed", "error");
-              }
-            }
-          }
-        } catch {
-          // SL/TP failed silently
-        }
-      }
-
       setSizeUnits(0);
     } catch (err: any) {
       const msg = err?.message || err?.error || String(err);

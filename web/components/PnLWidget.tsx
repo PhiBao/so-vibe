@@ -49,13 +49,23 @@ export default function PnLWidget() {
   const [data, setData] = useState<PnLData | null>(null);
   const [lastRecorded, setLastRecorded] = useState(0);
 
+  // Keep last used address in localStorage so sync works after wallet disconnects
+  const syncAddress = address || (typeof window !== "undefined" ? localStorage.getItem("sovibe-last-sync-address") : null);
+
+  useEffect(() => {
+    if (address && typeof window !== "undefined") {
+      localStorage.setItem("sovibe-last-sync-address", address);
+    }
+  }, [address]);
+
   const syncFills = async () => {
-    if (!isConnected || !address) return;
+    const addr = syncAddress;
+    if (!addr) return;
     try {
       await fetch("/api/bot/record-fills", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address }),
+        body: JSON.stringify({ address: addr }),
       });
       setLastRecorded(Date.now());
     } catch {}
@@ -81,7 +91,17 @@ export default function PnLWidget() {
     return () => clearInterval(interval);
   }, [isConnected, address]);
 
-  if (!data || !data.summary) return null;
+  if (!data || !data.summary) return (
+    <div className="terminal-card">
+      <div className="terminal-header">
+        <span className="text-[12px] font-bold tracking-wider">LIVE_PnL</span>
+        <span className="text-[10px] text-[var(--text-secondary)] ml-auto">loading...</span>
+      </div>
+      <div className="p-4 text-[11px] text-[var(--text-secondary)] font-mono">
+        No closed trades yet. PnL updates when SL/TP triggers or positions are closed.
+      </div>
+    </div>
+  );
 
   const s = data.summary;
   const equity = data.recentTrades

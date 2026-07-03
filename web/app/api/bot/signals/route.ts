@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSignals } from "@/lib/signal-store";
+import { getSignals, removeSignal } from "@/lib/signal-store";
 
 export async function GET() {
   const { signals, lastCycleTime } = getSignals();
@@ -8,4 +8,12 @@ export async function GET() {
     signals,
     lastCycleTime,
   });
+}
+
+export async function DELETE(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "Missing id" }, { status: 400 });
+  removeSignal(id);
+  return NextResponse.json({ success: true });
 }

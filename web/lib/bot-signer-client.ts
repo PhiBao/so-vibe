@@ -38,7 +38,7 @@ function getAccount(): PrivateKeyAccount {
 }
 
 export function isBotConfigured(): boolean {
-  return isBotUnlocked();
+  return hasEncryptedBotKeys();
 }
 
 export function computePayloadHash(payload: unknown): Hex {

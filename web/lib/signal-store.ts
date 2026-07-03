@@ -41,3 +41,7 @@ export function setSignals(signals: Signal[]) {
   latestSignals = signals;
   lastCycleTime = Date.now();
 }
+
+export function removeSignal(id: string) {
+  latestSignals = latestSignals.filter((s) => s.id !== id);
+}

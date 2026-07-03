@@ -405,11 +405,32 @@ export function synthesizeSignals(strategies, currentPrice, options = {}) {
 
   const vibeScore = computeVibeScore(allStrategies, sentiment, funding, etfFlow, macroSignal, strategyWeights);
 
-  const bestStrategy = allStrategies.filter(s => s.stopLoss).sort((a, b) => b.confidence - a.confidence)[0];
   const atr = allStrategies.find(s => s.meta?.atr)?.meta?.atr || currentPrice * 0.02;
 
-  let stopLoss = bestStrategy?.stopLoss || null;
-  let takeProfit = bestStrategy?.takeProfit || null;
+  // Pick SL/TP from a strategy that matches the action direction
+  const sameDirection = allStrategies
+    .filter(s => action === "long" ? s.signal > 0 : s.signal < 0)
+    .filter(s => s.stopLoss)
+    .sort((a, b) => b.confidence - a.confidence);
+
+  let stopLoss = null;
+  let takeProfit = null;
+  for (const s of sameDirection) {
+    if (s.stopLoss && !stopLoss) {
+      // Validate: for long, SL must be below price; for short, SL must be above price
+      if ((action === "long" && s.stopLoss < currentPrice) || (action === "short" && s.stopLoss > currentPrice)) {
+        stopLoss = s.stopLoss;
+      }
+    }
+    if (s.takeProfit && !takeProfit) {
+      if ((action === "long" && s.takeProfit > currentPrice) || (action === "short" && s.takeProfit < currentPrice)) {
+        takeProfit = s.takeProfit;
+      }
+    }
+    if (stopLoss && takeProfit) break;
+  }
+
+  // ATR-based fallback if no valid SL/TP found
   if (!stopLoss && action === "long") stopLoss = Math.round((currentPrice - atr * 1.5) * 100) / 100;
   if (!stopLoss && action === "short") stopLoss = Math.round((currentPrice + atr * 1.5) * 100) / 100;
   if (!takeProfit && action === "long") takeProfit = Math.round((currentPrice + atr * 3) * 100) / 100;
@@ -479,11 +500,29 @@ export function synthesizeMultiTF(tfResults, currentPrice, options = {}) {
   if (finalSignal >= 0.25 && adjustedConfidence >= 0.5) action = "long";
   else if (finalSignal <= -0.25 && adjustedConfidence >= 0.5) action = "short";
 
-  // Aggregate SL/TP from best TF result
-  const bestTF = tfVotes.find((v) => v.action !== "hold") || tfVotes[0];
-  const bestTfResult = tfResults[bestTF?.tf || "1h"];
-  const stopLoss = bestTfResult?.stopLoss || null;
-  const takeProfit = bestTfResult?.takeProfit || null;
+  // Aggregate SL/TP from best-matching TF result
+  const atr = Object.values(tfResults).find((r) => r?.details?.some((d) => d.meta?.atr))?.details?.find((d) => d.meta?.atr)?.meta?.atr || currentPrice * 0.02;
+  let stopLoss = null;
+  let takeProfit = null;
+  for (const tf of TF_INTERVALS) {
+    const r = tfResults[tf];
+    if (!r) continue;
+    if (!stopLoss && r.stopLoss) {
+      if ((action === "long" && r.stopLoss < currentPrice) || (action === "short" && r.stopLoss > currentPrice)) {
+        stopLoss = r.stopLoss;
+      }
+    }
+    if (!takeProfit && r.takeProfit) {
+      if ((action === "long" && r.takeProfit > currentPrice) || (action === "short" && r.takeProfit < currentPrice)) {
+        takeProfit = r.takeProfit;
+      }
+    }
+    if (stopLoss && takeProfit) break;
+  }
+  if (!stopLoss && action === "long") stopLoss = Math.round((currentPrice - atr * 1.5) * 100) / 100;
+  if (!stopLoss && action === "short") stopLoss = Math.round((currentPrice + atr * 1.5) * 100) / 100;
+  if (!takeProfit && action === "long") takeProfit = Math.round((currentPrice + atr * 3) * 100) / 100;
+  if (!takeProfit && action === "short") takeProfit = Math.round((currentPrice - atr * 3) * 100) / 100;
 
   // Vibe Score from the most weighted TF (1h as base)
   const baseResult = tfResults["1h"] || tfResults["4h"] || tfResults["1d"] || tfResults["15m"];

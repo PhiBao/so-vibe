@@ -364,22 +364,63 @@ export const sodexAdapter: DexAdapter = {
     const filterErr = checkOrderFilters(parseFloat(qtyStr), orderPrice, market);
     if (filterErr) throw new Error(filterErr);
 
+    const hasBrackets = !!(options?.stopLoss || options?.takeProfit);
+
     // Go struct field order: clOrdID, modifier, side, type, timeInForce, price, quantity, funds, stopPrice, stopType, triggerType, reduceOnly, positionSide
     const order: any = {
       clOrdID,
-      modifier: 1,
+      modifier: hasBrackets ? 3 : 1, // BRACKET if SL/TP included
       side: toSodexSide(side),
-      type: 2,
-      timeInForce: 3,
+      type: 2, // MARKET
+      timeInForce: 3, // IOC
     };
     order.price = formatPrice(orderPrice, market);
     order.quantity = qtyStr;
     order.reduceOnly = false;
     order.positionSide = 1;
 
+    const orders: any[] = [order];
+
+    // Include SL/TP as ATTACHED_STOP in the same batch
+    const closeSide = side === "buy" || side === "long" ? 2 : 1;
+    if (options?.stopLoss) {
+      const slPrice = formatPrice(options.stopLoss, market);
+      orders.push({
+        clOrdID: `${clOrdID}_sl`,
+        modifier: 4, // ATTACHED_STOP
+        side: closeSide,
+        type: 1, // LIMIT
+        timeInForce: 1, // GTC
+        price: slPrice,
+        quantity: qtyStr,
+        stopPrice: slPrice,
+        stopType: 1, // STOP_LOSS
+        triggerType: 2, // MARK_PRICE
+        reduceOnly: true,
+        positionSide: 1,
+      });
+    }
+    if (options?.takeProfit) {
+      const tpPrice = formatPrice(options.takeProfit, market);
+      orders.push({
+        clOrdID: `${clOrdID}_tp`,
+        modifier: 4, // ATTACHED_STOP
+        side: closeSide,
+        type: 1, // LIMIT
+        timeInForce: 1, // GTC
+        price: tpPrice,
+        quantity: qtyStr,
+        stopPrice: tpPrice,
+        stopType: 2, // TAKE_PROFIT
+        triggerType: 2, // MARK_PRICE
+        reduceOnly: true,
+        positionSide: 1,
+      });
+    }
+
     const payload: SodexOrderPayload = {
       type: "newOrder",
-      params: { accountID, symbolID, orders: [order] },
+      params: { accountID, symbolID, orders },
     };
 
     const action = buildUnsignedAction(payload, "/api/v1/perps/trade/orders");
@@ -443,16 +484,16 @@ export const sodexAdapter: DexAdapter = {
     const priceStr = formatPrice(triggerPrice, market);
     const order: any = {
       clOrdID,
-      modifier: 2,
+      modifier: 2, // STOP
       side: closeSide(side),
-      type: 1,
+      type: 1, // LIMIT (becomes limit order when triggered)
       timeInForce: 1,
       price: priceStr,
     };
     if (qtyStr) order.quantity = qtyStr;
     order.stopPrice = priceStr;
-    order.stopType = 1;
-    order.triggerType = 2;
+    order.stopType = 1; // STOP_LOSS
+    order.triggerType = 2; // MARK_PRICE
     order.reduceOnly = true;
     order.positionSide = 1;
 
@@ -482,9 +523,9 @@ export const sodexAdapter: DexAdapter = {
     const priceStr = formatPrice(triggerPrice, market);
     const order: any = {
       clOrdID,
-      modifier: 2,
+      modifier: 2, // STOP
       side: closeSide(side),
-      type: 1,
+      type: 1, // LIMIT (becomes limit order when triggered)
       timeInForce: 1,
       price: priceStr,
     };
@@ -670,7 +711,7 @@ export const sodexAdapter: DexAdapter = {
       payloadHash,
       domain,
       message,
-      endpoint: "/api/v1/spot/apikeys",
+      endpoint: "/api/v1/spot/accounts/api-keys",
       params: payload.params,
     };
   },

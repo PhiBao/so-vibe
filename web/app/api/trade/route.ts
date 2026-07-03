@@ -45,6 +45,8 @@ export async function POST(request: Request) {
       wallet,
       leverage,
       price: parseFloat(price),
+      stopLoss: stopLoss ? parseFloat(stopLoss) : undefined,
+      takeProfit: takeProfit ? parseFloat(takeProfit) : undefined,
     });
 
     return NextResponse.json({

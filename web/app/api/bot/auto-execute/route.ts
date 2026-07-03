@@ -23,28 +23,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Could not resolve account ID. Fund your wallet first." }, { status: 400 });
     }
 
-    // Build market order (unsigned)
     const action = await adapter.buildMarketOrder(symbol, side, size, {
       accountID,
       price,
       wallet: address,
+      stopLoss,
+      takeProfit,
     });
 
-    // Build SL/TP brackets (unsigned)
-    const brackets: any[] = [];
-    const closeSide = side === "long" || side === "buy" ? "short" : "long";
-    if (stopLoss) {
-      brackets.push(await adapter.buildStopLoss(symbol, closeSide as any, stopLoss, { wallet: address, size }));
-    }
-    if (takeProfit) {
-      brackets.push(await adapter.buildTakeProfit(symbol, closeSide as any, takeProfit, { wallet: address, size }));
-    }
-
-    return NextResponse.json({
-      success: true,
-      actions: [action, ...brackets],
-      mode: "auto",
-    });
+    return NextResponse.json({ success: true, action, mode: "auto" });
   } catch (err: unknown) {
     return NextResponse.json({ error: sanitizeError(err) }, { status: 500 });
   }
@@ -52,9 +39,5 @@ export async function POST(request: Request) {
 
 export async function GET() {
   const cfg = getNetworkConfig();
-  return NextResponse.json({
-    network: cfg.name,
-    chainId: cfg.chainId,
-    available: true,
-  });
+  return NextResponse.json({ network: cfg.name, chainId: cfg.chainId, available: true });
 }

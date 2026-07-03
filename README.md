@@ -55,9 +55,12 @@ SoVibe turns raw market data + ETF flows + macro context + LLM-analyzed news int
 | SL/TP automation | Live |
 | Dual-source backtest with real data only, slippage modeling, parameter sweep | Live |
 | Live PnL + Signal Accuracy from on-chain fills | Live |
+| SL/TP brackets in single batch (manual + auto) | Live |
+| Open position stop display (SL/TP badges on dashboard + positions) | Live |
 | Copy-trading leaderboard with curated wallet discovery | Live |
 | Encrypted local auto-trading bot keys | Live |
-| Testnet / mainnet network switch | Live |
+| Testnet / mainnet network switch (cookie-based, Vercel-safe) | Live |
+| Settings page with key verification + FETCH FROM SODEX | Live |
 | Full SoSoValue news with currency/tag/category filters | Live |
 | Cyberpunk terminal UI | Live |
 
@@ -253,7 +256,7 @@ npm run dev   # localhost:3000
 ## 11. Roadmap
 
 ### Done — Wave 3
-- [x] Mainnet / testnet network switch with runtime persistence
+- [x] Mainnet / testnet network switch with cookie-based persistence (Vercel-safe)
 - [x] Encrypted local auto-trading bot keys (PBKDF2 + AES-GCM)
 - [x] Copy-trading leaderboard with curated wallet ranking
 - [x] Wallet profile reuse across profile and leaderboard APIs
@@ -261,6 +264,10 @@ npm run dev   # localhost:3000
 - [x] Robust real-data-only backtest with slippage modeling, false-positive analysis, parameter sweep
 - [x] Live PnL + Signal Accuracy computed from on-chain fills
 - [x] Dashboard PnL widget with equity-curve sparkline
+- [x] SL/TP brackets submitted in single batch (BRACKET/ATTACHED_STOP)
+- [x] Signal SL/TP direction validation in swarm synthesis
+- [x] Open position stop display on dashboard + positions page
+- [x] Settings page with FETCH FROM SODEX + key-pair verification
 - [x] Live strategy performance scorecard + file-based PnL
 - [x] Hardened security: client-side bot signing, sanitized API errors
 

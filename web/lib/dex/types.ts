@@ -192,7 +192,7 @@ export interface DexAdapter {
     symbol: string,
     side: OrderSide,
     size: number,
-    options?: { wallet?: string; leverage?: number; accountID?: number; price?: number }
+    options?: { wallet?: string; leverage?: number; accountID?: number; price?: number; stopLoss?: number; takeProfit?: number }
   ): Promise<UnsignedAction>;
 
   buildLimitOrder(

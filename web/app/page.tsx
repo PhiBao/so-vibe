@@ -141,8 +141,6 @@ export default function Dashboard() {
             <StatBlock label="Drawdown" value={`${portfolio.drawdown as string || "0"}%`} sub={`PF: ${stats.profitFactor as string || "0"}`} color="yellow" />
           </div>
 
-          <PnLWidget />
-
           <div className="terminal-card border-l-2 border-l-[var(--cyan)] sticky top-4 z-10">
             <div className="terminal-header">
               <span className="text-[11px] font-bold tracking-wider">WALLET_OVERVIEW</span>
@@ -170,13 +168,21 @@ export default function Dashboard() {
                 <div className="space-y-2">
                   <div className="text-[10px] text-[var(--text-secondary)] uppercase tracking-wider mb-2">On-Chain Positions</div>
                   {walletPositions.map((pos, i) => (
-                    <div key={i} className="flex items-center justify-between py-2 px-3 bg-white/[0.02] border border-[var(--border)]">
-                      <div className="flex items-center gap-3">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 border ${(pos.side as string)?.toLowerCase() === "long" ? "border-[var(--green)] text-[var(--green)]" : "border-[var(--red)] text-[var(--red)]"}`}>{(pos.side as string || "?").toUpperCase()}</span>
-                        <span className="text-[12px] font-mono font-semibold text-[var(--cyan)]">{pos.symbol as string}</span>
+                    <div key={i} className="py-2 px-3 bg-white/[0.02] border border-[var(--border)] space-y-1">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 border ${(pos.side as string)?.toLowerCase() === "long" ? "border-[var(--green)] text-[var(--green)]" : "border-[var(--red)] text-[var(--red)]"}`}>{(pos.side as string || "?").toUpperCase()}</span>
+                          <span className="text-[12px] font-mono font-semibold text-[var(--cyan)]">{pos.symbol as string}</span>
+                        </div>
+                        <div className="text-[11px] font-mono text-[var(--text-secondary)]">Size: {(pos.size as number || 0).toFixed(4)}</div>
+                        <div className={`text-[11px] font-mono font-bold ${(pos.unrealizedPnl as number || 0) >= 0 ? "text-[var(--green)]" : "text-[var(--red)]"}`}>{(pos.unrealizedPnl as number || 0) >= 0 ? "+" : ""}${(pos.unrealizedPnl as number || 0).toFixed(2)}</div>
                       </div>
-                      <div className="text-[11px] font-mono text-[var(--text-secondary)]">Size: {(pos.size as number || 0).toFixed(4)}</div>
-                      <div className={`text-[11px] font-mono font-bold ${(pos.unrealizedPnl as number || 0) >= 0 ? "text-[var(--green)]" : "text-[var(--red)]"}`}>{(pos.unrealizedPnl as number || 0) >= 0 ? "+" : ""}${(pos.unrealizedPnl as number || 0).toFixed(2)}</div>
+                      {(pos.stopLoss as number || pos.takeProfit as number) && (
+                        <div className="flex items-center gap-4 text-[10px] font-mono text-[var(--text-dim)]">
+                          {(pos.stopLoss as number) ? <span>SL: <span className="text-[var(--red)]">${(pos.stopLoss as number).toFixed(2)}</span></span> : null}
+                          {(pos.takeProfit as number) ? <span>TP: <span className="text-[var(--green)]">${(pos.takeProfit as number).toFixed(2)}</span></span> : null}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -192,6 +198,8 @@ export default function Dashboard() {
           <div className="text-[12px] text-[var(--text-secondary)] font-mono">Connect your EVM wallet to see real portfolio data from SoDEX</div>
         </div>
       )}
+
+      <PnLWidget />
 
       <div className="terminal-card">
         <div className="terminal-header"><span className="text-[11px] font-bold tracking-wider">MARKET_DATA</span><span className="text-[10px] text-[var(--text-secondary)] ml-auto">sodex.dev/api/v1</span></div>

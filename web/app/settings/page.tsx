@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAccount } from "wagmi";
 import { useToast } from "@/components/ToastProvider";
-import { getNetworkConfig, type NetworkName, type NetworkConfig } from "@/lib/config";
-import { useSodexTx } from "@/lib/use-sodex-tx";
+import { getNetworkConfig, type NetworkConfig } from "@/lib/config";
+import { privateKeyToAddress } from "viem/accounts";
+import type { Hex } from "viem";
 import {
   hasEncryptedBotKeys,
   isBotUnlocked,
@@ -59,12 +60,11 @@ function MaskedInput({
 export default function SettingsPage() {
   const { addToast } = useToast();
   const { address, isConnected } = useAccount();
-  const { sendInstructions } = useSodexTx();
 
   const [config, setConfig] = useState<NetworkConfig | null>(null);
   const [mounted, setMounted] = useState(false);
 
-  const [apiKeyName, setApiKeyName] = useState("sovibe-bot");
+  const [apiKeyName, setApiKeyName] = useState("");
   const [publicKey, setPublicKey] = useState("");
   const [privateKey, setPrivateKey] = useState("");
   const [password, setPassword] = useState("");
@@ -72,7 +72,18 @@ export default function SettingsPage() {
 
   const [hasStoredKeys, setHasStoredKeys] = useState(false);
   const [unlocked, setUnlocked] = useState(false);
-  const [registering, setRegistering] = useState(false);
+
+  const [listingKeys, setListingKeys] = useState(false);
+  const [apiKeysList, setApiKeysList] = useState<Array<{ name: string; publicKey: string }>>([]);
+
+  const derivedAddress = useMemo(() => {
+    if (privateKey.length !== 66 || !privateKey.startsWith("0x")) return null;
+    try {
+      return privateKeyToAddress(privateKey as Hex).toLowerCase();
+    } catch {
+      return null;
+    }
+  }, [privateKey]);
 
   useEffect(() => {
     setMounted(true);
@@ -129,41 +140,22 @@ export default function SettingsPage() {
     addToast("Bot keys cleared", "success");
   };
 
-  const registerApiKey = async () => {
-    if (!isConnected || !address) {
-      addToast("Connect your wallet first", "error");
-      return;
-    }
-    if (!publicKey.startsWith("0x") || publicKey.length !== 42) {
-      addToast("Enter a valid API public key (0x + 40 hex chars)", "error");
-      return;
-    }
-    if (!apiKeyName) {
-      addToast("Enter an API key name", "error");
-      return;
-    }
-    setRegistering(true);
+  const listApiKeys = async () => {
+    if (!address) { addToast("Connect your wallet first", "error"); return; }
+    setListingKeys(true);
+    setApiKeysList([]);
     try {
-      const res = await fetch("/api/bot/register-key", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ wallet: address, publicKey, name: apiKeyName }),
-      });
+      const res = await fetch(`/api/bot/list-keys?address=${address}`);
       const data = await res.json();
-      if (!data.success || !data.action) {
-        addToast(data.error || "Failed to build API key registration", "error");
-        return;
-      }
-      const result = await sendInstructions(data.action);
-      if (result.success) {
-        addToast("API key registered on-chain", "success");
+      if (data.keys && data.keys.length > 0) {
+        setApiKeysList(data.keys);
       } else {
-        addToast(result.error || "API key registration failed", "error");
+        addToast("No API keys found on this account.", "info");
       }
     } catch (err: unknown) {
-      addToast(err instanceof Error ? err.message : "Registration failed", "error");
+      addToast(err instanceof Error ? err.message : "Failed to list keys", "error");
     } finally {
-      setRegistering(false);
+      setListingKeys(false);
     }
   };
 
@@ -216,7 +208,7 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      {/* Auto-Trade Bot */}
+          {/* Auto-Trade Bot */}
       <div className="terminal-card">
         <div className="terminal-header">
           <span className="text-[12px] font-bold tracking-wider">AUTO_TRADE_BOT</span>
@@ -227,40 +219,20 @@ export default function SettingsPage() {
         <div className="p-4 space-y-5">
           <div className="text-[11px] text-[var(--text-secondary)] font-mono leading-relaxed">
             Auto-trading signs orders locally in your browser with a SoDEX API key.
-            The private key is encrypted with your password and stored in this browser only.
+            <span className="text-[var(--yellow)]"> Visit{" "}
+              <a href="https://sodex.com/apikeys" target="_blank" rel="noopener noreferrer" className="underline text-[var(--cyan)]">sodex.com/apikeys</a>{" "}
+              to create a key,</span> then
+            paste the key name, public key, and private key below.
           </div>
 
-          {/* Step 1: Register API key */}
+          {/* Step 1: Save encrypted keys */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
               <span className="flex items-center justify-center w-5 h-5 text-[10px] font-bold border border-[var(--cyan)] text-[var(--cyan)]">1</span>
-              <span className="text-[12px] font-bold text-[var(--cyan)] tracking-wider">REGISTER API KEY ON-CHAIN</span>
-              <Tooltip text="SoDEX must recognize the API key before it can sign orders. This is a one-time transaction signed by your master wallet (MetaMask). You only need to do this once per key.">
+              <span className="text-[12px] font-bold text-[var(--cyan)] tracking-wider">SAVE ENCRYPTED KEY PAIR</span>
+              <Tooltip text="Create your API key at sodex.com/apikeys, then paste the key name, public key (EVM address), and 32-byte private key below. The private key is encrypted with your password and stored only in this browser.">
                 <span className="text-[10px] text-[var(--text-secondary)] cursor-help border border-[var(--border)] rounded-full w-4 h-4 flex items-center justify-center">?</span>
               </Tooltip>
-            </div>
-            <div className="text-[11px] text-[var(--text-secondary)] font-mono pl-7">
-              Enter the key name and public key below, then click Register. Your wallet will sign the on-chain addAPIKey transaction.
-            </div>
-            <div className="pl-7">
-              <button
-                onClick={registerApiKey}
-                disabled={registering || !isConnected || !publicKey}
-                className="btn-terminal btn-terminal-green text-[11px] py-1.5 px-4 font-bold disabled:opacity-40"
-              >
-                {registering ? "SIGNING..." : "[ REGISTER API KEY ]"}
-              </button>
-              {!isConnected && (
-                <div className="text-[10px] text-[var(--yellow)] font-mono mt-2">Connect MetaMask to register the API key.</div>
-              )}
-            </div>
-          </div>
-
-          {/* Step 2: Save encrypted keys */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 text-[10px] font-bold border border-[var(--cyan)] text-[var(--cyan)]">2</span>
-              <span className="text-[12px] font-bold text-[var(--cyan)] tracking-wider">SAVE ENCRYPTED KEY PAIR</span>
             </div>
 
             {hasStoredKeys && !unlocked && (
@@ -313,7 +285,30 @@ export default function SettingsPage() {
             {!hasStoredKeys && (
               <div className="space-y-3 pl-7">
                 <div className="space-y-2">
-                  <label className="text-[11px] text-[var(--text-secondary)] uppercase tracking-wider">API Key Name</label>
+                  <div className="flex items-center gap-2">
+                    <label className="text-[11px] text-[var(--text-secondary)] uppercase tracking-wider">API Key Name</label>
+                    {isConnected && (
+                      <button onClick={listApiKeys} disabled={listingKeys} className="btn-terminal text-[9px] py-0.5 px-2">
+                        {listingKeys ? "..." : "[ FETCH FROM SODEX ]"}
+                      </button>
+                    )}
+                  </div>
+                  {apiKeysList.length > 0 && (
+                    <div className="space-y-1">
+                      {apiKeysList.map((key) => (
+                        <button
+                          key={key.name}
+                          onClick={() => { setApiKeyName(key.name); setPublicKey(key.publicKey); }}
+                          className={`w-full text-left text-[11px] font-mono py-1.5 px-3 border transition-colors ${
+                            apiKeyName === key.name ? "border-[var(--cyan)] bg-[var(--cyan)]/10 text-[var(--cyan)]" : "border-[var(--border)] text-[var(--text-secondary)] hover:border-[var(--cyan)]/30"
+                          }`}
+                        >
+                          <span className="text-[var(--text)]">{key.name}</span>
+                          <span className="text-[var(--text-dim)] ml-3">{key.publicKey.slice(0, 10)}...{key.publicKey.slice(-6)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <input
                     type="text"
                     name="sovibe-api-key-name"
@@ -322,6 +317,7 @@ export default function SettingsPage() {
                     data-form-type="other"
                     value={apiKeyName}
                     onChange={(e) => setApiKeyName(e.target.value)}
+                    placeholder="e.g. SODEX_API_KEY"
                     className="terminal-input w-full text-[12px] font-mono"
                   />
                 </div>
@@ -329,6 +325,13 @@ export default function SettingsPage() {
                 <div className="space-y-2">
                   <label className="text-[11px] text-[var(--text-secondary)] uppercase tracking-wider">API Public Key</label>
                   <MaskedInput name="sovibe-public-key" value={publicKey} onChange={setPublicKey} placeholder="0x..." />
+                  {derivedAddress && (
+                    <div className={`text-[10px] font-mono ${derivedAddress === publicKey.toLowerCase() ? "text-[var(--green)]" : "text-[var(--red)]"}`}>
+                      {derivedAddress === publicKey.toLowerCase()
+                        ? "Key pair matches"
+                        : `Key pair mismatch — derived ${derivedAddress.slice(0, 10)}...${derivedAddress.slice(-6)}`}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -348,10 +351,10 @@ export default function SettingsPage() {
             )}
           </div>
 
-          {/* Step 3 hint */}
+          {/* Step 2 hint */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <span className="flex items-center justify-center w-5 h-5 text-[10px] font-bold border border-[var(--cyan)] text-[var(--cyan)]">3</span>
+              <span className="flex items-center justify-center w-5 h-5 text-[10px] font-bold border border-[var(--cyan)] text-[var(--cyan)]">2</span>
               <span className="text-[12px] font-bold text-[var(--cyan)] tracking-wider">ENABLE AUTO MODE</span>
             </div>
             <div className="text-[11px] text-[var(--text-secondary)] font-mono pl-7">

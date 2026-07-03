@@ -457,21 +457,14 @@ export default function BotsPage() {
       const result = await sendInstructions(data.action);
       if (!result.success) { setExecuteError(result.error || "Transaction failed"); addToast(result.error || "Transaction failed", "error"); return; }
 
-      // Attach SL/TP brackets after a short delay so the market order fills first
-      const brackets = data.bracketActions || [];
-      let bracketOk = 0;
-      if (brackets.length > 0) {
-        await new Promise((r) => setTimeout(r, 500));
-      }
-      for (let i = 0; i < brackets.length; i++) {
-        if (i > 0) await new Promise((r) => setTimeout(r, 200));
-        const br = await sendInstructions(brackets[i]);
-        if (br.success) bracketOk++;
-        else addToast(`SL/TP ${i + 1} failed: ${br.error || "unknown"}`, "error");
-      }
-
-      addToast(`${sig.side.toUpperCase()} ${sig.symbol} executed${bracketOk > 0 ? ` · ${bracketOk} SL/TP attached` : ""}`, "success");
+      const hasSlTp = sig.stopLoss || sig.takeProfit;
+      addToast(`${sig.side.toUpperCase()} ${sig.symbol} executed${hasSlTp ? " · SL/TP attached" : ""}`, "success");
       setSignals((prev) => prev.filter((s) => s.id !== sig.id));
+      fetch(`/api/bot/signals?id=${sig.id}`, { method: "DELETE" }).catch(() => {});
+      // Sync fills after delay to pick up any closed positions from this trade
+      setTimeout(() => {
+        fetch("/api/bot/record-fills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ address }) }).catch(() => {});
+      }, 3000);
     } catch (err: unknown) {
       setExecuteError(err instanceof Error ? err.message : "Request failed");
       addToast(err instanceof Error ? err.message : "Request failed", "error");
@@ -500,38 +493,35 @@ export default function BotsPage() {
         }),
       });
       const data = await res.json();
-      if (!data.success || !data.actions) {
+      if (!data.success || !data.action) {
         setExecuteError(data.error || "Auto-execute failed");
         addToast(data.error || "Auto-execute failed", "error");
         return;
       }
 
-      // Sign and submit each action locally with the stored bot key
-      let allOk = true;
-      for (let i = 0; i < data.actions.length; i++) {
-        const action = data.actions[i];
-        // After the main order (i=0), wait for fill before attaching brackets
-        if (i === 1) await new Promise((r) => setTimeout(r, 500));
-        if (i > 1) await new Promise((r) => setTimeout(r, 200));
-        const signed = await signBotAction(action, action.message?.nonce || Date.now());
-        const result = await submitSignedAction(signed);
-        if (!result.success) {
-          allOk = false;
-          setExecuteError(result.error || `Action ${i + 1} failed`);
-          addToast(result.error || `Action ${i + 1} failed`, "error");
-          break;
-        }
+      const signed = await signBotAction(data.action, data.action.message?.nonce || Date.now());
+      const result = await submitSignedAction(signed);
+      if (!result.success) {
+        setExecuteError(result.error || "Auto-execute failed");
+        addToast(result.error || "Auto-execute failed", "error");
+        return;
       }
 
-      if (allOk) {
-        addToast(`AUTO ${sig.side.toUpperCase()} ${sig.symbol} executed`, "success");
-        setSignals((prev) => prev.filter((s) => s.id !== sig.id));
-      }
+      const hasSlTp = sig.stopLoss || sig.takeProfit;
+      addToast(`AUTO ${sig.side.toUpperCase()} ${sig.symbol} executed${hasSlTp ? " · SL/TP attached" : ""}`, "success");
+      setSignals((prev) => prev.filter((s) => s.id !== sig.id));
+      fetch(`/api/bot/signals?id=${sig.id}`, { method: "DELETE" }).catch(() => {});
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Auto-execute failed";
-      const hint = msg.toLowerCase().includes("api key") || msg.toLowerCase().includes("unauthorized")
-        ? " Make sure the API key is registered on-chain in Settings."
-        : "";
+      const lower = msg.toLowerCase();
+      let hint = "";
+      if (lower.includes("not unlocked") || lower.includes("not configured")) {
+        hint = " Unlock your bot keys in Settings first.";
+      } else if (lower.includes("not found") || lower.includes("api key")) {
+        hint = " Check the API key name and key pair in Settings — they must match the key created at sodex.com/apikeys.";
+      } else if (lower.includes("unauthorized") || lower.includes("forbidden")) {
+        hint = " The API key may be revoked or on the wrong network. Check sodex.com/apikeys.";
+      }
       setExecuteError(msg + hint);
       addToast(msg + hint, "error");
     } finally {

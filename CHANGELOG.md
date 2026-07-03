@@ -56,7 +56,19 @@ Robust Backtest — Real data only (SoDEX 1h or SoSoValue 1d). Full swarm inputs
 
 Live PnL from On-Chain Fills — Closed positions polled from SoDEX and recorded in a local JSON file. Dashboard widget and bots-page Signal Accuracy panel show hit rate, slippage, Sharpe, drawdown, and equity curve.
 
-Security Hardening. Server-side bot signer removed. Internal API errors sanitized. Production debug logs removed. `NEXT_PUBLIC_RPC_URL` credential risk documented.
+SL/TP Brackets (One Batch) — Market order + SL + TP submitted in one batch request (`modifier: BRACKET` / `ATTACHED_STOP`) instead of separate delayed requests. Client simplified to single sign-and-submit.
+
+Signal SL/TP Direction Validation — Swarm synthesis now filters strategies by signal direction and validates SL/TP against current price (SL below entry for long, above for short). ATR-based fallbacks guarantee sensible values.
+
+Open Stop Display — Dashboard WALLET_OVERVIEW and positions page show live SL/TP values from SoDEX open orders API. Stops are fetched separately from the position state.
+
+Dashboard Stats from Live PnL — Win Rate, Drawdown, total trades now read from `pnl-tracker` (realized closed-trade data) instead of stale risk-state store.
+
+Vercel Cookie-Based Network Persistence — Network choice persisted via `sovibe-network` cookie; `.runtime-config.json` file kept for local dev. All 18 API routes read the cookie on every request. Adapter caches reset on network change.
+
+Settings Page Polish — FETCH FROM SODEX button pulls real API key names from the account; key-pair verification derives EVM address from private key and shows match/mismatch. Default name placeholder replaced with link to sodex.com/apikeys.
+
+Security Hardening. Server-side bot signer removed. Internal API errors sanitized. Production debug logs removed. `NEXT_PUBLIC_RPC_URL` credential risk documented. Separate `NEXT_PUBLIC_MAINNET_RPC_URL` for mainnet.
 
 ---
 
