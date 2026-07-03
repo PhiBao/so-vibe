@@ -86,8 +86,8 @@ export default function SettingsPage() {
   }, []);
 
   const saveBot = async () => {
-    if (!apiKeyName || !publicKey.startsWith("0x") || !privateKey.startsWith("0x")) {
-      addToast("Fill in all bot key fields (keys must start with 0x)", "error");
+    if (!apiKeyName || publicKey.length !== 42 || privateKey.length !== 66) {
+      addToast("Public key must be 0x + 40 hex chars. Private key must be 0x + 64 hex chars.", "error");
       return;
     }
     if (password.length < 8) {
@@ -134,8 +134,8 @@ export default function SettingsPage() {
       addToast("Connect your wallet first", "error");
       return;
     }
-    if (!publicKey.startsWith("0x") || publicKey.length !== 66) {
-      addToast("Enter a valid 64-byte public key (0x + 64 hex chars)", "error");
+    if (!publicKey.startsWith("0x") || publicKey.length !== 42) {
+      addToast("Enter a valid API public key (0x + 40 hex chars)", "error");
       return;
     }
     if (!apiKeyName) {

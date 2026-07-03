@@ -20,9 +20,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid wallet address" }, { status: 400 });
   }
 
-  if (!/^0x[a-fA-F0-9]{64}$/i.test(publicKey)) {
+  if (!/^0x[a-fA-F0-9]{40}$/i.test(publicKey)) {
     return NextResponse.json(
-      { error: "Invalid public key format. Expected 0x + 64 hex chars." },
+      { error: "Invalid public key format. Expected 0x + 40 hex chars (Ethereum address)." },
       { status: 400 }
     );
   }

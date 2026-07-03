@@ -305,8 +305,13 @@ export default function BotsPage() {
   useEffect(() => {
     setAutoAvailable(isBotConfigured());
     const onStorage = () => setAutoAvailable(isBotConfigured());
+    const onFocus = () => setAutoAvailable(isBotConfigured());
     window.addEventListener("storage", onStorage);
-    return () => window.removeEventListener("storage", onStorage);
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", onFocus);
+    };
   }, []);
 
   useEffect(() => {
@@ -452,13 +457,17 @@ export default function BotsPage() {
       const result = await sendInstructions(data.action);
       if (!result.success) { setExecuteError(result.error || "Transaction failed"); addToast(result.error || "Transaction failed", "error"); return; }
 
-      // Attach SL/TP brackets with ≥100ms nonce stagger
+      // Attach SL/TP brackets after a short delay so the market order fills first
       const brackets = data.bracketActions || [];
       let bracketOk = 0;
+      if (brackets.length > 0) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
       for (let i = 0; i < brackets.length; i++) {
-        await new Promise((r) => setTimeout(r, i * 150));
+        if (i > 0) await new Promise((r) => setTimeout(r, 200));
         const br = await sendInstructions(brackets[i]);
         if (br.success) bracketOk++;
+        else addToast(`SL/TP ${i + 1} failed: ${br.error || "unknown"}`, "error");
       }
 
       addToast(`${sig.side.toUpperCase()} ${sig.symbol} executed${bracketOk > 0 ? ` · ${bracketOk} SL/TP attached` : ""}`, "success");
@@ -499,20 +508,19 @@ export default function BotsPage() {
 
       // Sign and submit each action locally with the stored bot key
       let allOk = true;
-      const baseNonce = data.actions[0]?.message?.nonce || Date.now();
       for (let i = 0; i < data.actions.length; i++) {
         const action = data.actions[i];
-        // Stagger nonces ≥100ms for batched orders
-        const nonce = i === 0 ? baseNonce : baseNonce + i * 150;
-        const signed = await signBotAction(action, nonce);
+        // After the main order (i=0), wait for fill before attaching brackets
+        if (i === 1) await new Promise((r) => setTimeout(r, 500));
+        if (i > 1) await new Promise((r) => setTimeout(r, 200));
+        const signed = await signBotAction(action, action.message?.nonce || Date.now());
         const result = await submitSignedAction(signed);
         if (!result.success) {
           allOk = false;
-          setExecuteError(result.error || `Bracket ${i + 1} failed`);
-          addToast(result.error || `Bracket ${i + 1} failed`, "error");
+          setExecuteError(result.error || `Action ${i + 1} failed`);
+          addToast(result.error || `Action ${i + 1} failed`, "error");
           break;
         }
-        if (i < data.actions.length - 1) await new Promise((r) => setTimeout(r, 150));
       }
 
       if (allOk) {

@@ -670,7 +670,7 @@ export const sodexAdapter: DexAdapter = {
       payloadHash,
       domain,
       message,
-      endpoint: "/api/v1/spot/accounts/apiKeys",
+      endpoint: "/api/v1/spot/apikeys",
       params: payload.params,
     };
   },
