@@ -262,7 +262,7 @@ Open position stop display:
 
 ## Wave 3 Roadmap
 
-- [x] Copy-trading leaderboard (on-chain SoDEX wallet discovery)
+- [x] Copy-trading leaderboard (auto-discovered from analyzed wallets)
 - [x] One-click trade mirroring with proportional position sizing
 - [x] Strategy config cards — shareable URLs for bot settings
 - [x] Wallet profiles with PnL/win rate analytics

@@ -1,7 +1,6 @@
 import "@/lib/config-server";
 import { NextResponse } from "next/server";
-import { buildWalletProfile } from "@/lib/wallet-profile";
-import { getLeaderboardWallets } from "@/lib/leaderboard-wallets";
+import { getDiscoveredWallets } from "@/lib/leaderboard-cache";
 import { sanitizeError } from "@/lib/api-error";
 import { applyRequestNetwork } from "@/lib/request-network";
 
@@ -14,13 +13,25 @@ export async function GET(request: Request) {
   const minTrades = parseInt(searchParams.get("minTrades") || "5", 10);
 
   try {
-    const wallets = getLeaderboardWallets();
-    const profiles = await Promise.all(
-      wallets.map((w) => buildWalletProfile(w.address, w.label))
-    );
+    const discovered = getDiscoveredWallets(minTrades);
 
-    const ranked = profiles
-      .filter((p) => !p.error && p.totalTrades >= minTrades)
+    const ranked = discovered
+      .map((c) => ({
+        address: c.address,
+        source: "discovered" as const,
+        equity: c.equity,
+        totalTrades: c.totalTrades,
+        winRate: c.winRate,
+        profitFactor: c.profitFactor,
+        totalReturn: c.totalReturn,
+        sharpe: c.sharpe,
+        maxDrawdown: c.maxDrawdown,
+        avgHoldMinutes: c.avgHoldMinutes,
+        lastActive: c.lastActive,
+        strategyType: c.strategyType,
+        strategyConfidence: c.strategyConfidence,
+        currentPositions: c.currentPositions,
+      }))
       .sort((a, b) => {
         const aVal = (a as any)[sort] ?? 0;
         const bVal = (b as any)[sort] ?? 0;
@@ -31,22 +42,7 @@ export async function GET(request: Request) {
       sort,
       minTrades,
       count: ranked.length,
-      wallets: ranked.map((p) => ({
-        address: p.address,
-        label: p.label,
-        equity: p.equity,
-        totalTrades: p.totalTrades,
-        winRate: p.winRate,
-        profitFactor: p.profitFactor,
-        totalReturn: p.totalReturn,
-        sharpe: p.sharpe,
-        maxDrawdown: p.maxDrawdown,
-        avgHoldMinutes: p.avgHoldMinutes,
-        lastActive: p.lastActive,
-        strategyType: p.strategyType,
-        strategyConfidence: p.strategyConfidence,
-        currentPositions: p.currentPositions,
-      })),
+      wallets: ranked,
     });
   } catch (err: unknown) {
     return NextResponse.json({ error: sanitizeError(err) }, { status: 500 });

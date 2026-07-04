@@ -44,17 +44,17 @@ lib/dex/sodex-adapter.ts — Fixed SoDEX REST v1 paths (`/api/v1/perps/trade/ord
 
 ### Feature Summary
 
-Mainnet / Testnet Switch — Runtime network selection persisted via cookie (`sovibe-network`). Wagmi registers both chains. EIP712 domains stay in sync. Works on Vercel serverless — no file-based config needed.
+Mainnet / Testnet Switch — Runtime network selection persisted via cookie (`sovibe-network`). Wagmi registers both chains. EIP712 domains stay in sync.
 
-Encrypted Auto-Trading Bot Keys — API key encrypted with a user password, decrypted only in memory, signs orders locally. No server-side signer. On-chain `addAPIKey` registration flow included.
+Encrypted Auto-Trading Bot Keys — API key encrypted with a user password, decrypted only in memory, signs orders locally. On-chain `addAPIKey` registration flow included.
 
-Copy-Trading Leaderboard — Curated SoDEX wallet discovery ranked by verified on-chain metrics. One-click analyze and copy.
+Copy-Trading Leaderboard — Auto-discovers wallets as users analyze them. Walks the leaderboard builds itself organically. "SoDEX native leaderboard API — coming soon."
 
 Multi-Timeframe Analysis — Bot cycle aggregates 15m/1h/4h/1d signals with weighted consensus and a +0.10 bonus when 3+ timeframes agree.
 
 Robust Backtest — Real data only (SoDEX 1h or SoSoValue 1d). Full swarm inputs, configurable slippage, false-positive / exit-reason analysis, expectancy, parameter sweep. No synthetic candles.
 
-Live PnL from On-Chain Fills — Closed positions polled from SoDEX and recorded in a local JSON file. Dashboard widget and bots-page Signal Accuracy panel show hit rate, slippage, Sharpe, drawdown, and equity curve.
+Live PnL from On-Chain Fills — Closed positions polled from SoDEX. Dashboard widget and bots-page Signal Accuracy panel show hit rate, slippage, Sharpe, drawdown, and equity curve.
 
 SL/TP Brackets (One Batch) — Market order + SL + TP submitted in one batch request (`modifier: BRACKET` / `ATTACHED_STOP`) instead of separate delayed requests. Client simplified to single sign-and-submit.
 
@@ -64,11 +64,9 @@ Open Stop Display — Dashboard WALLET_OVERVIEW and positions page show live SL/
 
 Dashboard Stats from Live PnL — Win Rate, Drawdown, total trades now read from `pnl-tracker` (realized closed-trade data) instead of stale risk-state store.
 
-Vercel Cookie-Based Network Persistence — Network choice persisted via `sovibe-network` cookie; `.runtime-config.json` file kept for local dev. All 18 API routes read the cookie on every request. Adapter caches reset on network change.
-
 Settings Page Polish — FETCH FROM SODEX button pulls real API key names from the account; key-pair verification derives EVM address from private key and shows match/mismatch. Default name placeholder replaced with link to sodex.com/apikeys.
 
-Security Hardening. Server-side bot signer removed. Internal API errors sanitized. Production debug logs removed. `NEXT_PUBLIC_RPC_URL` credential risk documented. Separate `NEXT_PUBLIC_MAINNET_RPC_URL` for mainnet.
+Security Hardening. Server-side bot signer removed. Internal API errors sanitized. Production debug logs removed.
 
 ---
 

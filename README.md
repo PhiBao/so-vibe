@@ -57,7 +57,7 @@ SoVibe turns raw market data + ETF flows + macro context + LLM-analyzed news int
 | Live PnL + Signal Accuracy from on-chain fills | Live |
 | SL/TP brackets in single batch (manual + auto) | Live |
 | Open position stop display (SL/TP badges on dashboard + positions) | Live |
-| Copy-trading leaderboard with curated wallet discovery | Live |
+| Copy-trading leaderboard with auto-discovered wallet ranking | Live |
 | Encrypted local auto-trading bot keys | Live |
 | Testnet / mainnet network switch (cookie-based, Vercel-safe) | Live |
 | Settings page with key verification + FETCH FROM SODEX | Live |
@@ -258,7 +258,7 @@ npm run dev   # localhost:3000
 ### Done — Wave 3
 - [x] Mainnet / testnet network switch with cookie-based persistence (Vercel-safe)
 - [x] Encrypted local auto-trading bot keys (PBKDF2 + AES-GCM)
-- [x] Copy-trading leaderboard with curated wallet ranking
+- [x] Copy-trading leaderboard with auto-discovered wallet ranking
 - [x] Wallet profile reuse across profile and leaderboard APIs
 - [x] Multi-timeframe signal aggregation (15m / 1h / 4h / 1d)
 - [x] Robust real-data-only backtest with slippage modeling, false-positive analysis, parameter sweep

@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { buildWalletProfile } from "@/lib/wallet-profile";
 import { sanitizeError } from "@/lib/api-error";
 import { applyRequestNetwork } from "@/lib/request-network";
+import { addDiscoveredProfile } from "@/lib/leaderboard-cache";
 
 export async function GET(request: Request) {
   applyRequestNetwork(request);
@@ -21,6 +22,10 @@ export async function GET(request: Request) {
     const profile = await buildWalletProfile(address);
     if (profile.error) {
       return NextResponse.json({ error: sanitizeError(new Error(profile.error), true) }, { status: 500 });
+    }
+    // Auto-add to leaderboard discovery cache
+    if (!profile.error && profile.totalTrades > 0) {
+      try { addDiscoveredProfile(profile as any); } catch {}
     }
     return NextResponse.json(profile);
   } catch (err: unknown) {

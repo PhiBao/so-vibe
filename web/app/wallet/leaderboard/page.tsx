@@ -9,6 +9,7 @@ type SortKey = "sharpe" | "totalReturn" | "winRate" | "profitFactor" | "totalTra
 interface LeaderboardWallet {
   address: string;
   label?: string;
+  source?: "curated" | "discovered";
   equity: number;
   totalTrades: number;
   winRate: number;
@@ -75,7 +76,7 @@ export default function LeaderboardPage() {
         <div>
           <h1 className="text-xl font-bold text-[var(--cyan)] glow-cyan tracking-wider">COPY_LEADERBOARD</h1>
           <p className="text-[12px] text-[var(--text-secondary)] font-mono mt-1">
-            Discover top SoDEX wallets ranked by verified on-chain performance
+            Auto-discovered wallets ranked by on-chain performance. Analyze any wallet to add it here.
           </p>
         </div>
         <Link href="/wallet" className="btn-terminal text-[11px] py-1.5 px-3">
@@ -120,10 +121,12 @@ export default function LeaderboardPage() {
       {wallets.length === 0 && !loading && (
         <div className="terminal-card text-center py-12">
           <div className="text-[var(--text-secondary)] font-mono text-[13px]">
-            No wallets meet the current filters.
+            No wallets discovered yet.
           </div>
           <div className="text-[11px] text-[var(--text-dim)] font-mono mt-1">
-            Add addresses to <span className="text-[var(--cyan)]">LEADERBOARD_WALLETS</span> or lower the minimum trade count.
+            Analyze any wallet in <span className="text-[var(--cyan)]">/wallet</span> and it will appear here automatically.
+            <br />
+            <span className="text-[var(--yellow)]">SoDEX native leaderboard API — coming soon.</span>
           </div>
         </div>
       )}
@@ -144,6 +147,11 @@ export default function LeaderboardPage() {
                   <span className="text-[10px] px-2 py-0.5 border border-[var(--green)]/30 text-[var(--green)] font-mono">
                     {w.strategyType.toUpperCase().replace(/_/g, " ")}
                   </span>
+                  {w.source === "discovered" && (
+                    <span className="text-[9px] px-1.5 py-0.5 border border-[var(--magenta)]/30 text-[var(--magenta)] font-mono">
+                      DISCOVERED
+                    </span>
+                  )}
                   <span className="text-[10px] text-[var(--text-secondary)] font-mono">
                     {w.strategyConfidence > 0 ? `${Math.round(w.strategyConfidence * 100)}% match` : "unclassified"}
                   </span>
